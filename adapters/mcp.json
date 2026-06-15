@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "marvis": {
+      "command": "python",
+      "args": ["-m", "marvis.mcp.server"],
+      "description": "Marvis 智能助手 — 文件搜索、文档分析、系统管理、安全巡检、工作流引擎"
+    }
+  }
+}

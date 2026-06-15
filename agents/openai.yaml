@@ -1,0 +1,7 @@
+﻿interface:
+  display_name: "Marvis 智能助手"
+  short_description: "文件搜索理解、智能整理、系统管理，灵感源自腾讯 Marvis。"
+  brand_color: "#0052D9"
+  default_prompt: "使用 $marvis 帮我搜索桌面上的 PDF 文件"
+policy:
+  allow_implicit_invocation: true

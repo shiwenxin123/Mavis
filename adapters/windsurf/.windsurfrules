@@ -1,0 +1,63 @@
+# Marvis 智能助手 — Windsurf 配置
+
+## MCP 配置
+
+在 Windsurf 的 MCP 配置中添加：
+
+```json
+{
+  "mcpServers": {
+    "marvis": {
+      "command": "python",
+      "args": ["-m", "marvis.mcp.server"]
+    }
+  }
+}
+```
+
+## .windsurfrules
+
+将以下内容添加到 `.windsurfrules`：
+
+---
+
+Marvis 智能助手提供以下 MCP tools，当用户需要时调用：
+
+**文件操作**
+- `search_files(root, mode, keyword, ext, limit)` — 搜索文件
+- `search_file_content(root, keyword, ext, limit)` — 搜索文件内容
+- `analyze_directory(root)` — 目录分析
+- `find_duplicates(root)` — 重复文件检测
+- `batch_rename(root, pattern, ext, execute)` — 批量重命名
+- `compress_images(root, quality, max_size)` — 图片压缩
+- `merge_pdfs(root, output)` — PDF 合并
+
+**文档处理**
+- `read_document(filepath)` — 读取文档内容
+- `contract_review(filepath)` — 合同审查
+- `data_analysis(filepath)` — 数据分析
+- `generate_chart(filepath, chart_type, output)` — 图表生成
+- `convert_format(filepath, output_format)` — 格式转换
+- `ocr_image(image_path)` — 图片 OCR
+
+**系统管理**
+- `system_info()` — 系统信息
+- `disk_usage()` — 磁盘使用
+- `process_list(sort_by, limit)` — 进程列表
+- `port_check(port)` — 端口检查
+- `system_clean()` — 系统清理扫描
+- `net_repair()` — 网络修复
+
+**安全与项目**
+- `scan_project(root)` — 项目分析
+- `security_audit(root)` — 安全巡检
+- `web_search(query)` — 网页搜索
+- `web_monitor(url)` — 网页监控
+
+**自动化**
+- `create_task(name, type, command, schedule)` — 创建定时任务
+- `run_task(name)` — 执行任务
+- `run_workflow(name, params)` — 执行工作流
+- `list_workflows()` — 列出工作流
+
+注意：批量操作默认预览，删除需确认。

@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "marvis"
+version = "2.0.0"
+description = "通用 AI 智能助手核心库 — 文件搜索、文档分析、系统管理、安全巡检、工作流引擎。灵感源自腾讯 Marvis 马维斯。"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Marvis Contributors"}
+]
+keywords = ["ai", "assistant", "file-search", "document-analysis", "security-audit", "workflow", "mcp"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+full = [
+    "pdfplumber>=0.9",
+    "python-docx>=1.1",
+    "openpyxl>=3.1",
+    "matplotlib>=3.7",
+    "pandas>=2.0",
+    "Pillow>=10.0",
+    "chardet>=5.0",
+    "httpx>=0.25",
+    "beautifulsoup4>=4.12",
+]
+mcp = [
+    "mcp>=1.0",
+]
+ocr = [
+    "Pillow>=10.0",
+    "pytesseract>=0.3",
+]
+
+[project.scripts]
+marvis = "marvis.cli:main"
+marvis-mcp = "marvis.mcp.server:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["marvis*"]
+
+[tool.setuptools.package-data]
+marvis = ["../adapters/**/*"]

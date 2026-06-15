@@ -354,3 +354,437 @@ def call_tool(tool_name: str, arguments: dict) -> dict:
         return handler(arguments)
     except Exception as e:
         return {"error": str(e)}
+
+
+# ──── MCP Tool Schema (for server.py) ────
+
+ALL_TOOLS: list[dict] = [
+    {
+        "name": "search_files",
+        "description": "按文件名/大小/时间搜索文件",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "root": {"type": "string", "description": "搜索根目录"},
+                "mode": {"type": "string", "enum": ["name", "content", "size", "time", "regex"], "default": "name"},
+                "keyword": {"type": "string", "description": "搜索关键词"},
+                "ext": {"type": "string", "description": "文件扩展名过滤"},
+                "limit": {"type": "integer", "default": 50},
+            },
+            "required": ["root"],
+        },
+    },
+    {
+        "name": "search_content",
+        "description": "搜索文件内容（关键词/正则）",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "root": {"type": "string", "description": "搜索根目录"},
+                "keyword": {"type": "string", "description": "搜索关键词"},
+                "pattern": {"type": "string", "description": "正则表达式"},
+                "ext": {"type": "string"},
+                "limit": {"type": "integer", "default": 30},
+            },
+            "required": ["root", "keyword"],
+        },
+    },
+    {
+        "name": "read_document",
+        "description": "读取文档内容（PDF/DOCX/XLSX/TXT/MD）",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"path": {"type": "string", "description": "文件路径"}},
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "contract_review",
+        "description": "合同审查：提取条款、检测风险",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"path": {"type": "string", "description": "合同文件路径"}},
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "data_analysis",
+        "description": "数据分析（Excel/CSV），统计、异常、趋势",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"path": {"type": "string", "description": "数据文件路径"}},
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "generate_chart",
+        "description": "从 Excel/CSV 数据生成图表",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "chart_type": {"type": "string", "enum": ["line", "bar", "hist", "pie", "scatter", "auto"], "default": "auto"},
+                "output_path": {"type": "string"},
+                "columns": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "organize_files",
+        "description": "分析目录文件结构",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "root": {"type": "string"},
+                "max_depth": {"type": "integer"},
+            },
+            "required": ["root"],
+        },
+    },
+    {
+        "name": "find_duplicates",
+        "description": "查找重复文件（基于哈希）",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "root": {"type": "string"},
+                "max_depth": {"type": "integer"},
+            },
+            "required": ["root"],
+        },
+    },
+    {
+        "name": "find_empty_dirs",
+        "description": "查找空目录",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"root": {"type": "string", "default": "."}},
+        },
+    },
+    {
+        "name": "build_image_gallery",
+        "description": "扫描构建 AI 图库（按人像/主题/时间/地点）",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "root": {"type": "string"},
+                "max_images": {"type": "integer", "default": 100},
+            },
+            "required": ["root"],
+        },
+    },
+    {
+        "name": "build_doc_library",
+        "description": "扫描构建文档库/知识库",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "root": {"type": "string"},
+                "max_files": {"type": "integer", "default": 100},
+            },
+            "required": ["root"],
+        },
+    },
+    {
+        "name": "search_gallery",
+        "description": "搜索图库",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "root": {"type": "string"},
+                "keyword": {"type": "string"},
+                "max_images": {"type": "integer", "default": 200},
+            },
+            "required": ["root", "keyword"],
+        },
+    },
+    {
+        "name": "search_library",
+        "description": "搜索文档库",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "root": {"type": "string"},
+                "keyword": {"type": "string"},
+                "max_files": {"type": "integer", "default": 200},
+            },
+            "required": ["root", "keyword"],
+        },
+    },
+    {
+        "name": "system_info",
+        "description": "获取系统信息（CPU/内存/磁盘/GPU）",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "network_info",
+        "description": "获取网络信息（IP/DNS/网关）",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "process_list",
+        "description": "获取进程列表",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "sort_by": {"type": "string", "default": "cpu"},
+                "limit": {"type": "integer", "default": 20},
+            },
+        },
+    },
+    {
+        "name": "disk_usage",
+        "description": "获取磁盘使用情况",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "port_check",
+        "description": "检查端口是否开放",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "port": {"type": "integer"},
+                "host": {"type": "string", "default": "127.0.0.1"},
+            },
+            "required": ["port"],
+        },
+    },
+    {
+        "name": "system_clean",
+        "description": "扫描可清理的系统垃圾文件",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "net_repair",
+        "description": "网络修复（刷新DNS/重置Winsock）",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "ocr_image",
+        "description": "对单张图片进行 OCR 文字提取",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "lang": {"type": "string", "default": "chi_sim+eng"},
+            },
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "ocr_search",
+        "description": "OCR 扫描图片并按关键词搜索",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "root": {"type": "string"},
+                "keyword": {"type": "string"},
+                "lang": {"type": "string", "default": "chi_sim+eng"},
+                "max_files": {"type": "integer", "default": 50},
+            },
+            "required": ["root", "keyword"],
+        },
+    },
+    {
+        "name": "convert_format",
+        "description": "文件格式转换（PDF/DOCX/XLSX/CSV/JSON/Markdown）",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "format": {"type": "string", "enum": ["json", "csv", "markdown", "text"], "default": "json"},
+                "output_path": {"type": "string"},
+            },
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "web_search",
+        "description": "网页搜索",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "count": {"type": "integer", "default": 10},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "read_webpage",
+        "description": "读取网页内容",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string"},
+                "max_length": {"type": "integer", "default": 5000},
+            },
+            "required": ["url"],
+        },
+    },
+    {
+        "name": "monitor_webpage",
+        "description": "监控网页变化",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string"},
+                "keyword": {"type": "string"},
+            },
+            "required": ["url"],
+        },
+    },
+    {
+        "name": "scan_project",
+        "description": "项目感知分析（技术栈/依赖/入口/建议）",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "root": {"type": "string"},
+                "max_depth": {"type": "integer", "default": 5},
+            },
+            "required": ["root"],
+        },
+    },
+    {
+        "name": "generate_readme",
+        "description": "自动生成项目 README",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"root": {"type": "string"}},
+            "required": ["root"],
+        },
+    },
+    {
+        "name": "security_audit",
+        "description": "安全巡检（敏感文件/端口/弱密码/防火墙）",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"root": {"type": "string", "default": "."}},
+        },
+    },
+    {
+        "name": "batch_rename",
+        "description": "批量重命名文件",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "root": {"type": "string"},
+                "pattern": {"type": "string", "enum": ["date-prefix", "lowercase", "sequential", "clean"], "default": "date-prefix"},
+                "ext": {"type": "string"},
+                "dry_run": {"type": "boolean", "default": True},
+            },
+            "required": ["root"],
+        },
+    },
+    {
+        "name": "compress_images",
+        "description": "批量压缩图片",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "root": {"type": "string"},
+                "quality": {"type": "integer", "default": 85},
+                "max_size": {"type": "integer"},
+                "dry_run": {"type": "boolean", "default": True},
+            },
+            "required": ["root"],
+        },
+    },
+    {
+        "name": "merge_pdfs",
+        "description": "合并目录下所有 PDF",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "root": {"type": "string"},
+                "output_path": {"type": "string", "default": "merged.pdf"},
+            },
+            "required": ["root"],
+        },
+    },
+    {
+        "name": "list_tasks",
+        "description": "列出定时任务",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "create_task",
+        "description": "创建定时任务",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "type": {"type": "string", "enum": ["script", "url-ping", "remind", "file-watch"]},
+                "command": {"type": "string"},
+                "url": {"type": "string"},
+                "schedule": {"type": "string"},
+                "watch_path": {"type": "string"},
+                "description": {"type": "string"},
+            },
+            "required": ["name", "type"],
+        },
+    },
+    {
+        "name": "run_task",
+        "description": "手动执行定时任务",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "delete_task",
+        "description": "删除定时任务",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "list_workflows",
+        "description": "列出工作流和内置模板",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "run_workflow",
+        "description": "执行工作流",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "params": {"type": "object"},
+            },
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "create_workflow",
+        "description": "创建自定义工作流",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "steps": {"type": "array", "items": {"type": "object"}},
+                "description": {"type": "string"},
+            },
+            "required": ["name", "steps"],
+        },
+    },
+]
+
+
+def execute_tool(name: str, arguments: dict) -> str:
+    """执行 MCP Tool 调用，返回 JSON 字符串"""
+    handler = TOOL_REGISTRY.get(name)
+    if not handler:
+        result = {"error": f"未知工具: {name}"}
+    else:
+        try:
+            result = handler(arguments)
+        except Exception as e:
+            result = {"error": str(e)}
+    return json.dumps(result, ensure_ascii=False, default=str)

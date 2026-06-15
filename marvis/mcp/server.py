@@ -10,6 +10,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 
 from marvis.mcp.tools import ALL_TOOLS, execute_tool
+import json
 
 server = Server("marvis")
 
@@ -30,8 +31,9 @@ async def handle_list_tools() -> list[Tool]:
 @server.call_tool()
 async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
     """执行工具调用"""
-    result = execute_tool(name, arguments)
-    return [TextContent(type="text", text=result)]
+    result_str = execute_tool(name, arguments)
+        # execute_tool 已返回 JSON 字符串
+        return [TextContent(type="text", text=result_str)]
 
 
 async def main():

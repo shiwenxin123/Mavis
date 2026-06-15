@@ -147,8 +147,8 @@ def _dispatch(args):
         from marvis.core.search import search
         result = search(
             root=args.root, mode=args.mode, keyword=args.keyword,
-            pattern=args.pattern, ext=args.ext, min_size=args.min_size,
-            max_size=args.max_size, days=args.days, limit=args.limit,
+            pattern=args.pattern, ext=args.ext, min_size_mb=args.min_size,
+            max_size_mb=args.max_size, days=args.days, limit=args.limit,
         )
         _output(result, args)
 
@@ -187,7 +187,7 @@ def _dispatch(args):
             "firewall": sm.firewall_rules, "startup": sm.startup_list,
         }
         result = actions.get(args.action, lambda: {"error": f"未知操作: {args.action}"})()
-        _output_str(result, args)
+        _output(result, args)
 
     elif cmd == "project":
         from marvis.core.project_scanner import scan_project, generate_readme, parse_dependencies
@@ -216,11 +216,11 @@ def _dispatch(args):
         _output(result, args)
 
     elif cmd == "workflow":
-        from marvis.core.workflow import list_workflows, run_workflow, builtin_workflows
+        from marvis.core.workflow import list_workflows, run_workflow, builtin_templates
         if args.action == "list":
             result = {"workflows": list_workflows()}
         elif args.action == "templates":
-            result = builtin_workflows()
+            result = builtin_templates()
         elif args.action == "run":
             params = json.loads(args.params) if args.params else None
             result = run_workflow(args.name, params)
@@ -309,7 +309,7 @@ def _output(result, args):
             print(result)
 
 
-def _output_str(result, args):
+def _output(result, args):
     """输出字符串结果（系统命令类）"""
     if hasattr(args, "json") and args.json:
         try:

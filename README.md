@@ -41,7 +41,15 @@
 
 ## 📦 安装
 
-### 方式一：pip 安装（推荐）
+当前版本 **2.1.0**（[更新说明](CHANGELOG.md)）。本仓库尚未配置 PyPI 发布。
+
+### 从 GitHub Release 标签安装
+
+```bash
+pip install "git+https://github.com/shiwenxin123/Mavis.git@v2.1.0"
+```
+
+### 方式一：pip 安装（本地开发）
 
 ```bash
 # 基础安装
@@ -216,6 +224,7 @@ marvis/
 ├── agents/openai.yaml          # Codex UI 元数据
 ├── references/                 # 参考文档
 ├── pyproject.toml              # Python 包配置
+├── CHANGELOG.md                # 版本说明
 ├── install.py                  # Codex Skill 一键安装
 ├── LICENSE                     # MIT License
 └── README.md

@@ -9,30 +9,58 @@ import hashlib
 import json
 import os
 import re
+import urllib.error
+import urllib.request
 from datetime import datetime
 from typing import Optional
 from urllib.parse import quote_plus, urlparse
 
-from marvis.utils.shell import run_powershell
+_MAX_BYTES = 2_000_000
+_UA = "Marvis/2.1"
 
-SNAPSHOT_DIR = os.path.join(os.path.expanduser("~"), ".marvis", "web_snapshots")
+
+def _snapshot_dir() -> str:
+    from marvis.utils.config import marvis_home
+    return str(marvis_home() / "web_snapshots")
 
 
 def ensure_snapshot_dir():
-    os.makedirs(SNAPSHOT_DIR, exist_ok=True)
+    os.makedirs(_snapshot_dir(), exist_ok=True)
+
+
+def http_get(url: str, timeout: int = 15, read_limit: int = _MAX_BYTES) -> tuple[str, str, int]:
+    """抓取 URL。返回 (body, error, status)。status 为 0 表示请求未发出。"""
+    from marvis.utils.config import network_allowed
+
+    allowed, reason = network_allowed()
+    if not allowed:
+        return "", reason, 0
+
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return "", "仅允许 http/https URL", 0
+
+    request = urllib.request.Request(url, headers={"User-Agent": _UA})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            status = int(getattr(response, "status", 200) or 200)
+            raw = response.read(read_limit) if read_limit else b""
+            charset = response.headers.get_content_charset() or "utf-8"
+            return raw.decode(charset, errors="replace"), "", status
+    except urllib.error.HTTPError as exc:
+        return "", f"HTTP {exc.code}", int(exc.code)
+    except Exception as exc:
+        return "", f"抓取失败: {exc}", 0
 
 
 def fetch_page(url: str, timeout: int = 15) -> tuple[str, str, int]:
     """抓取网页 HTML，返回 (html, error, returncode)"""
-    ps_script = f"""
-try {{
-    $resp = Invoke-WebRequest -Uri '{url}' -UseBasicParsing -TimeoutSec {timeout} -MaximumRedirection 5
-    $resp.Content
-}} catch {{
-    Write-Error $_.Exception.Message
-}}
-"""
-    return run_powershell(ps_script, timeout=timeout + 10)
+    body, err, status = http_get(url, timeout=timeout)
+    if err or status == 0:
+        return "", err or "抓取失败", 1
+    if status >= 400:
+        return body, f"HTTP {status}", 1
+    return body, "", 0
 
 
 def extract_text(html: str) -> str:
@@ -117,7 +145,7 @@ def monitor_page(url: str, keyword: Optional[str] = None) -> dict:
     current_hash = hashlib.md5(text.encode()).hexdigest()
 
     url_hash = hashlib.md5(url.encode()).hexdigest()
-    snapshot_file = os.path.join(SNAPSHOT_DIR, f"{url_hash}.json")
+    snapshot_file = os.path.join(_snapshot_dir(), f"{url_hash}.json")
 
     previous_hash = None
     changed = False

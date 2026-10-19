@@ -178,8 +178,28 @@ def convert_encoding(root: str, target_encoding: str = "utf-8", dry_run: bool = 
     return results
 
 
+def _safe_extract(zf: zipfile.ZipFile, dest: str) -> None:
+    """拒绝路径穿越和解压符号链接。"""
+    root = os.path.abspath(dest)
+    os.makedirs(root, exist_ok=True)
+    for info in zf.infolist():
+        name = info.filename.replace("\\", "/")
+        if name.startswith("/") or name.startswith("../") or "/../" in f"/{name}":
+            raise ValueError(f"拒绝解压路径穿越: {info.filename}")
+        parts = [part for part in name.split("/") if part not in ("", ".")]
+        if ".." in parts:
+            raise ValueError(f"拒绝解压路径穿越: {info.filename}")
+        target = os.path.abspath(os.path.join(root, *parts)) if parts else root
+        if os.path.commonpath([root, target]) != root:
+            raise ValueError(f"拒绝解压路径穿越: {info.filename}")
+        mode = (info.external_attr >> 16) & 0o170000
+        if mode == 0o120000:
+            raise ValueError(f"拒绝解压符号链接: {info.filename}")
+    zf.extractall(root)
+
+
 def batch_extract(root: str, output_dir: Optional[str] = None) -> list[dict]:
-    """批量解压 ZIP"""
+    """批量解压 ZIP。拒绝写出目标目录之外的文件。"""
     results = []
     for dirpath, dirnames, filenames in os.walk(root):
         for f in filenames:
@@ -188,10 +208,9 @@ def batch_extract(root: str, output_dir: Optional[str] = None) -> list[dict]:
             full = os.path.join(dirpath, f)
             dest = output_dir or os.path.join(dirpath, f"_{os.path.splitext(f)[0]}")
             try:
-                os.makedirs(dest, exist_ok=True)
                 with zipfile.ZipFile(full, "r") as zf:
-                    zf.extractall(dest)
-                results.append({"archive": os.path.abspath(full), "output": dest, "status": "success"})
-            except (zipfile.BadZipFile, PermissionError, OSError) as e:
+                    _safe_extract(zf, dest)
+                results.append({"archive": os.path.abspath(full), "output": os.path.abspath(dest), "status": "success"})
+            except (zipfile.BadZipFile, PermissionError, OSError, ValueError) as e:
                 results.append({"archive": os.path.abspath(full), "status": f"failed: {e}"})
     return results

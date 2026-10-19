@@ -6,20 +6,33 @@ Marvis — 通用 AI 智能助手核心库。
 或通过 MCP Server 向任何 AI 平台暴露。
 """
 
-__version__ = "2.0.0"
-__all__ = [
-    # core
-    "search",
-    "doc_analyzer",
-    "file_organizer",
-    "knowledge_base",
-    "system_manager",
-    "ocr",
-    "format_converter",
-    "task_scheduler",
-    "web_monitor",
-    "project_scanner",
-    "security_audit",
-    "batch_processor",
-    "workflow",
-]
+__version__ = "2.1.0"
+
+_LAZY_MODULES = {
+    "search": "marvis.core.search",
+    "doc_analyzer": "marvis.core.doc_analyzer",
+    "file_organizer": "marvis.core.file_organizer",
+    "knowledge_base": "marvis.core.knowledge_base",
+    "system_manager": "marvis.core.system_manager",
+    "ocr": "marvis.core.ocr",
+    "format_converter": "marvis.core.format_converter",
+    "task_scheduler": "marvis.core.task_scheduler",
+    "web_monitor": "marvis.core.web_monitor",
+    "project_scanner": "marvis.core.project_scanner",
+    "security_audit": "marvis.core.security_audit",
+    "batch_processor": "marvis.core.batch_processor",
+    "workflow": "marvis.core.workflow",
+}
+
+__all__ = ["__version__", *_LAZY_MODULES.keys()]
+
+
+def __getattr__(name: str):
+    import importlib
+
+    target = _LAZY_MODULES.get(name)
+    if target is None:
+        raise AttributeError(f"module 'marvis' has no attribute {name!r}")
+    module = importlib.import_module(target)
+    globals()[name] = module
+    return module

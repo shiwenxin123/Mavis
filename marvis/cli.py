@@ -2,10 +2,11 @@
 Marvis CLI — 命令行入口。
 
 用法:
+    marvis doctor
     marvis search <root> [--mode name] [--keyword hello] [--ext .pdf]
     marvis analyze <filepath> [--action contract|analysis|chart|polish]
     marvis organize <root> [--action analyze|duplicates|empty-dirs]
-    marvis system <action> [--port 80]
+    marvis system <action> [--port 80] [--execute]
     marvis project <root> [--action scan|readme]
     marvis security <root> [--action full|sensitive-files|ports]
     marvis workflow <action> [--name myflow]
@@ -18,20 +19,30 @@ Marvis CLI — 命令行入口。
 """
 
 import json
+import os
 import sys
 
+from marvis import __version__
 
-def main():
-    """主 CLI 入口"""
+
+def main(argv=None) -> int:
+    """主 CLI 入口。返回进程退出码。"""
     import argparse
 
     parser = argparse.ArgumentParser(
         description="Marvis 智能助手 — 文件搜索、文档分析、系统管理、安全巡检",
-        prog="marvis"
+        prog="marvis",
+    )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        help="本地模式：阻止外部网络访问",
     )
     sub = parser.add_subparsers(dest="command", help="子命令")
 
-    # search
+    sub.add_parser("doctor", help="检查安装、依赖和运行模式")
+
     p_search = sub.add_parser("search", help="智能文件搜索")
     p_search.add_argument("root", help="搜索根目录")
     p_search.add_argument("--mode", choices=["name", "content", "size", "time", "regex"], default="name")
@@ -44,7 +55,6 @@ def main():
     p_search.add_argument("--limit", type=int, default=50)
     p_search.add_argument("--json", action="store_true")
 
-    # analyze
     p_analyze = sub.add_parser("analyze", help="文档分析")
     p_analyze.add_argument("filepath")
     p_analyze.add_argument("--action", choices=["contract", "analysis", "chart", "polish"], default="contract")
@@ -52,13 +62,11 @@ def main():
     p_analyze.add_argument("--output", "-o")
     p_analyze.add_argument("--json", action="store_true")
 
-    # organize
     p_org = sub.add_parser("organize", help="文件整理")
     p_org.add_argument("root")
     p_org.add_argument("--action", choices=["analyze", "duplicates", "empty-dirs"], default="analyze")
     p_org.add_argument("--json", action="store_true")
 
-    # system
     p_sys = sub.add_parser("system", help="系统管理")
     p_sys.add_argument("action", choices=[
         "info", "net", "processes", "services", "disk", "port-check",
@@ -67,58 +75,51 @@ def main():
     p_sys.add_argument("--port", type=int)
     p_sys.add_argument("--sort", default="cpu")
     p_sys.add_argument("--limit", type=int, default=20)
+    p_sys.add_argument("--execute", action="store_true", help="确认执行网络修复（默认只预览）")
     p_sys.add_argument("--json", action="store_true")
 
-    # project
     p_proj = sub.add_parser("project", help="项目分析")
     p_proj.add_argument("root")
     p_proj.add_argument("--action", choices=["scan", "readme", "deps"], default="scan")
     p_proj.add_argument("--json", action="store_true")
 
-    # security
     p_sec = sub.add_parser("security", help="安全巡检")
     p_sec.add_argument("root", nargs="?", default=".")
     p_sec.add_argument("--action", choices=["full", "sensitive-files", "ports", "users", "firewall"], default="full")
     p_sec.add_argument("--json", action="store_true")
 
-    # workflow
     p_wf = sub.add_parser("workflow", help="工作流")
     p_wf.add_argument("action", choices=["list", "run", "templates", "create", "delete"])
     p_wf.add_argument("--name", "-n")
-    p_wf.add_argument("--params")
+    p_wf.add_argument("--params", help="JSON。create 需要 steps；run 需要参数对象")
     p_wf.add_argument("--json", action="store_true")
 
-    # convert
     p_conv = sub.add_parser("convert", help="格式转换")
     p_conv.add_argument("input")
     p_conv.add_argument("--format", "-f", choices=["json", "csv", "markdown", "text"], default="json")
     p_conv.add_argument("--output", "-o")
 
-    # batch
     p_batch = sub.add_parser("batch", help="批量处理")
     p_batch.add_argument("action", choices=["rename", "compress", "merge-pdf", "encoding"])
     p_batch.add_argument("root")
     p_batch.add_argument("--pattern", default="date-prefix")
     p_batch.add_argument("--quality", type=int, default=85)
     p_batch.add_argument("--output", "-o")
-    p_batch.add_argument("--execute", action="store_true")
+    p_batch.add_argument("--execute", action="store_true", help="确认执行。默认只预览")
     p_batch.add_argument("--json", action="store_true")
 
-    # ocr
     p_ocr = sub.add_parser("ocr", help="图片 OCR")
     p_ocr.add_argument("root")
     p_ocr.add_argument("--keyword", "-k")
     p_ocr.add_argument("--lang", default="chi_sim+eng")
     p_ocr.add_argument("--json", action="store_true")
 
-    # web
     p_web = sub.add_parser("web", help="网页工具")
     p_web.add_argument("action", choices=["search", "read", "monitor"])
     p_web.add_argument("--query", "-q")
     p_web.add_argument("--url", "-u")
     p_web.add_argument("--json", action="store_true")
 
-    # knowledge
     p_kb = sub.add_parser("knowledge", help="知识库")
     p_kb.add_argument("root")
     p_kb.add_argument("--mode", choices=["image-gallery", "doc-library"], default="doc-library")
@@ -126,83 +127,111 @@ def main():
     p_kb.add_argument("--keyword", "-k")
     p_kb.add_argument("--json", action="store_true")
 
-    # mcp-server
     sub.add_parser("mcp-server", help="启动 MCP 服务器")
 
-    args = parser.parse_args()
-
+    args = parser.parse_args(argv)
+    if args.local:
+        os.environ["MARVIS_MODE"] = "local"
     if not args.command:
         parser.print_help()
-        return
+        return 0
+    try:
+        return _dispatch(args)
+    except BrokenPipeError:
+        return 0
+    except Exception as exc:
+        _emit({"error": f"命令失败: {exc}"}, failed=True)
+        return 1
 
-    # Route to handler
-    _dispatch(args)
 
-
-def _dispatch(args):
+def _dispatch(args) -> int:
     """路由到对应的命令处理"""
     cmd = args.command
+
+    if cmd == "doctor":
+        from marvis.core.doctor import doctor, format_doctor
+        report = doctor()
+        if getattr(args, "json", False):
+            return _output(report, args)
+        print(format_doctor(report))
+        return 0
 
     if cmd == "search":
         from marvis.core.search import search
         result = search(
             root=args.root, mode=args.mode, keyword=args.keyword,
-            pattern=args.pattern, ext=args.ext, min_size_mb=args.min_size,
-            max_size_mb=args.max_size, days=args.days, limit=args.limit,
+            pattern=args.pattern, ext=args.ext,
+            min_size_mb=args.min_size or 0,
+            max_size_mb=args.max_size or 0,
+            days=args.days, limit=args.limit,
         )
-        _output(result, args)
+        return _output(result, args)
 
-    elif cmd == "analyze":
-        from marvis.core.doc_analyzer import read_file, contract_review, data_analysis, generate_chart, polish_text
+    if cmd == "analyze":
+        from marvis.core.doc_analyzer import (
+            contract_review, data_analysis, generate_chart, get_last_read_error,
+            polish_text, read_file,
+        )
         if args.action == "contract":
             text = read_file(args.filepath)
-            result = contract_review(text) if text else {"error": "无法读取文件"}
+            result = contract_review(text) if text else {"error": get_last_read_error() or "无法读取文件"}
         elif args.action == "analysis":
             result = data_analysis(args.filepath)
         elif args.action == "chart":
             result = generate_chart(args.filepath, args.chart_type, args.output)
-        elif args.action == "polish":
-            text = read_file(args.filepath)
-            result = polish_text(text) if text else {"error": "无法读取文件"}
-        _output(result, args)
-
-    elif cmd == "organize":
-        from marvis.core.file_organizer import scan_files, analyze_structure, find_duplicates, find_empty_dirs
-        files = scan_files(args.root)
-        if args.action == "analyze":
-            result = analyze_structure(files)
-        elif args.action == "duplicates":
-            result = {"duplicates": find_duplicates(files)}
-        elif args.action == "empty-dirs":
-            result = {"empty_dirs": find_empty_dirs(args.root)}
-        _output(result, args)
-
-    elif cmd == "system":
-        from marvis.core import system_manager as sm
-        actions = {
-            "info": sm.sys_info, "net": sm.net_info, "processes": lambda: sm.process_list(args.sort, args.limit),
-            "services": lambda: sm.service_list(), "disk": sm.disk_usage,
-            "port-check": lambda: sm.port_check(args.port) if args.port else {"error": "需要 --port"},
-            "clean": sm.system_clean, "repair": sm.net_repair,
-            "firewall": sm.firewall_rules, "startup": sm.startup_list,
-        }
-        result = actions.get(args.action, lambda: {"error": f"未知操作: {args.action}"})()
-        _output(result, args)
-
-    elif cmd == "project":
-        from marvis.core.project_scanner import scan_project, generate_readme, parse_dependencies
-        if args.action == "readme":
-            scan_result = scan_project(args.root)
-            print(generate_readme(scan_result))
-        elif args.action == "deps":
-            result = parse_dependencies(args.root)
-            _output(result, args)
         else:
-            result = scan_project(args.root)
-            _output(result, args)
+            text = read_file(args.filepath)
+            result = polish_text(text) if text else {"error": get_last_read_error() or "无法读取文件"}
+        return _output(result, args)
 
-    elif cmd == "security":
-        from marvis.core.security_audit import full_audit, check_sensitive_files, check_open_ports, check_user_accounts, check_firewall
+    if cmd == "organize":
+        from marvis.core.file_organizer import (
+            analyze_structure, find_duplicates, find_empty_dirs, scan_files,
+        )
+        if args.action == "analyze":
+            result = analyze_structure(scan_files(args.root))
+        elif args.action == "duplicates":
+            result = {"duplicates": find_duplicates(scan_files(args.root))}
+        else:
+            result = {"empty_dirs": find_empty_dirs(args.root)}
+        return _output(result, args)
+
+    if cmd == "system":
+        from marvis.core import system_manager as sm
+        if args.action == "processes":
+            result = sm.process_list(args.sort, args.limit)
+        elif args.action == "services":
+            result = sm.service_list()
+        elif args.action == "port-check":
+            result = sm.port_check(args.port) if args.port else {"error": "需要 --port"}
+        elif args.action == "repair":
+            result = sm.net_repair(execute=bool(args.execute))
+        else:
+            actions = {
+                "info": sm.sys_info,
+                "net": sm.net_info,
+                "disk": sm.disk_usage,
+                "clean": sm.system_clean,
+                "firewall": sm.firewall_rules,
+                "startup": sm.startup_list,
+            }
+            result = actions[args.action]()
+        return _output(result, args)
+
+    if cmd == "project":
+        from marvis.core.project_scanner import generate_readme, parse_dependencies, scan_project
+        if args.action == "readme":
+            print(generate_readme(scan_project(args.root)))
+            return 0
+        if args.action == "deps":
+            return _output(parse_dependencies(args.root), args)
+        return _output(scan_project(args.root), args)
+
+    if cmd == "security":
+        from marvis.core.security_audit import (
+            check_firewall, check_open_ports, check_sensitive_files,
+            check_user_accounts, full_audit,
+        )
         if args.action == "full":
             result = full_audit(args.root)
         elif args.action == "sensitive-files":
@@ -211,52 +240,61 @@ def _dispatch(args):
             result = {"open_ports": check_open_ports()}
         elif args.action == "users":
             result = {"users": check_user_accounts()}
-        elif args.action == "firewall":
+        else:
             result = {"firewall": check_firewall()}
-        _output(result, args)
+        return _output(result, args)
 
-    elif cmd == "workflow":
-        from marvis.core.workflow import list_workflows, run_workflow, builtin_templates
+    if cmd == "workflow":
+        from marvis.core.workflow import (
+            builtin_templates, create_workflow, delete_workflow, list_workflows, run_workflow,
+        )
         if args.action == "list":
             result = {"workflows": list_workflows()}
         elif args.action == "templates":
             result = builtin_templates()
         elif args.action == "run":
-            params = json.loads(args.params) if args.params else None
-            result = run_workflow(args.name, params)
+            result = _run_workflow_cli(args, run_workflow)
+        elif args.action == "create":
+            result = _create_workflow_cli(args, create_workflow)
+        elif args.action == "delete":
+            if not args.name:
+                result = {"error": "delete 需要 --name"}
+            else:
+                result = {"name": args.name, "deleted": delete_workflow(args.name)}
         else:
-            result = {"error": f"请使用 list/run/templates"}
-        _output(result, args)
+            result = {"error": "未知工作流操作"}
+        return _output(result, args)
 
-    elif cmd == "convert":
+    if cmd == "convert":
         from marvis.core.format_converter import convert
-        result = convert(args.input, args.format, args.output)
-        _output(result, args)
+        return _output(convert(args.input, args.format, args.output), args)
 
-    elif cmd == "batch":
-        from marvis.core.batch_processor import batch_rename, compress_images, merge_pdfs, convert_encoding
-        dry_run = not getattr(args, "execute", False)
+    if cmd == "batch":
+        from marvis.core.batch_processor import (
+            batch_rename, compress_images, convert_encoding, merge_pdfs,
+        )
+        dry_run = not bool(args.execute)
         if args.action == "rename":
-            result = {"renamed": batch_rename(args.root, args.pattern, dry_run)}
+            result = {"dry_run": dry_run, "renamed": batch_rename(args.root, args.pattern, dry_run)}
         elif args.action == "compress":
-            result = {"compressed": compress_images(args.root, args.quality, None, None, dry_run)}
+            result = {"dry_run": dry_run, "compressed": compress_images(args.root, args.quality, None, None, dry_run)}
         elif args.action == "merge-pdf":
             result = merge_pdfs(args.root, args.output or "merged.pdf")
-        elif args.action == "encoding":
-            result = {"encoding": convert_encoding(args.root, dry_run=dry_run)}
-        _output(result, args)
+        else:
+            result = {"dry_run": dry_run, "encoding": convert_encoding(args.root, dry_run=dry_run)}
+        return _output(result, args)
 
-    elif cmd == "ocr":
+    if cmd == "ocr":
         from marvis.core.ocr import scan_and_ocr, search_by_text
         results = scan_and_ocr(args.root, lang=args.lang)
         if args.keyword:
             result = {"matches": search_by_text(results, args.keyword)}
         else:
             result = {"ocr_results": results}
-        _output(result, args)
+        return _output(result, args)
 
-    elif cmd == "web":
-        from marvis.core.web_monitor import search_web, read_page, monitor_page
+    if cmd == "web":
+        from marvis.core.web_monitor import monitor_page, read_page, search_web
         if args.action == "search" and args.query:
             result = search_web(args.query)
         elif args.action == "read" and args.url:
@@ -264,13 +302,13 @@ def _dispatch(args):
         elif args.action == "monitor" and args.url:
             result = monitor_page(args.url)
         else:
-            result = {"error": "需要 --query 或 --url"}
-        _output(result, args)
+            result = {"error": "search 需要 --query；read/monitor 需要 --url"}
+        return _output(result, args)
 
-    elif cmd == "knowledge":
+    if cmd == "knowledge":
         from marvis.core.knowledge_base import (
-            build_image_gallery, build_doc_library, search_gallery, search_library,
-            gallery_stats, library_stats,
+            build_doc_library, build_image_gallery, gallery_stats, library_stats,
+            search_gallery, search_library,
         )
         if args.mode == "image-gallery":
             gallery = build_image_gallery(args.root)
@@ -288,38 +326,70 @@ def _dispatch(args):
                 result = library_stats(library)
             else:
                 result = {"library": library[:30], "total": len(library)}
-        _output(result, args)
+        return _output(result, args)
 
-    elif cmd == "mcp-server":
+    if cmd == "mcp-server":
         from marvis.mcp.server import run
         run()
+        return 0
+
+    return _output({"error": f"未知命令: {cmd}"}, args)
 
 
-def _output(result, args):
-    """输出结果"""
-    if hasattr(args, "json") and args.json:
-        print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+def _load_json_arg(raw: str | None):
+    if not raw:
+        return None, None
+    try:
+        return json.loads(raw), None
+    except json.JSONDecodeError as exc:
+        return None, {"error": f"--params 不是合法 JSON: {exc}"}
+
+
+def _create_workflow_cli(args, create_workflow) -> dict:
+    if not args.name:
+        return {"error": "create 需要 --name"}
+    payload, err = _load_json_arg(args.params)
+    if err:
+        return err
+    if isinstance(payload, list):
+        steps, description = payload, ""
+    elif isinstance(payload, dict):
+        steps = payload.get("steps")
+        description = payload.get("description") or ""
     else:
-        if isinstance(result, dict):
-            print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
-        elif isinstance(result, list):
-            for item in result:
-                print(json.dumps(item, ensure_ascii=False, default=str))
-        else:
-            print(result)
+        return {"error": "create 的 --params 需要 JSON 数组，或包含 steps 的对象"}
+    if not isinstance(steps, list) or not steps:
+        return {"error": "steps 必须是非空数组"}
+    return create_workflow(args.name, steps, description)
 
 
-def _output(result, args):
-    """输出字符串结果（系统命令类）"""
-    if hasattr(args, "json") and args.json:
-        try:
-            data = json.loads(result) if isinstance(result, str) else result
-            print(json.dumps(data, ensure_ascii=False, indent=2, default=str))
-        except (json.JSONDecodeError, TypeError):
-            print(result)
+def _run_workflow_cli(args, run_workflow) -> dict:
+    if not args.name:
+        return {"error": "run 需要 --name"}
+    if not args.params:
+        return run_workflow(args.name, None)
+    payload, err = _load_json_arg(args.params)
+    if err:
+        return err
+    if not isinstance(payload, dict):
+        return {"error": "run 的 --params 必须是 JSON 对象"}
+    return run_workflow(args.name, payload)
+
+
+def _emit(result, failed: bool) -> None:
+    if isinstance(result, str):
+        text = result
     else:
-        print(result)
+        text = json.dumps(result, ensure_ascii=False, indent=2, default=str)
+    print(text, file=sys.stderr if failed else sys.stdout)
+
+
+def _output(result, args) -> int:
+    """结构化结果统一打印 JSON。带 error 的结果走 stderr 并返回 1。"""
+    failed = isinstance(result, dict) and "error" in result
+    _emit(result, failed)
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

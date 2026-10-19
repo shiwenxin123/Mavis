@@ -9,20 +9,42 @@ Marvis 快捷工作流 — 组合操作为可复用流程。
 
 import json
 import os
+import re
 import subprocess
 import tempfile
 from datetime import datetime
-from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
-WORKFLOW_DIR = os.path.join(os.path.expanduser("~"), ".marvis", "workflows")
+_PARAM_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,40}")
+_PARAM_VALUE = re.compile(r"[\w.\- \u4e00-\u9fff]{0,120}")
+
+
+def _workflow_dir() -> str:
+    from marvis.utils.config import load_config
+    return load_config().workflow_dir
+
 
 def _ensure_dir():
-    os.makedirs(WORKFLOW_DIR, exist_ok=True)
+    os.makedirs(_workflow_dir(), exist_ok=True)
+
 
 def _path(name: str) -> str:
     safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
-    return os.path.join(WORKFLOW_DIR, f"{safe}.json")
+    return os.path.join(_workflow_dir(), f"{safe}.json")
+
+
+def _subst(text: str, params: Optional[dict]) -> str:
+    """替换 {{param}}。参数值拒绝 shell 元字符，避免拼进命令。"""
+    if not params:
+        return text
+    for key, value in params.items():
+        if not _PARAM_NAME.fullmatch(str(key)):
+            raise ValueError(f"参数名无效: {key}")
+        sval = str(value)
+        if not _PARAM_VALUE.fullmatch(sval):
+            raise ValueError(f"参数 {key} 含有不允许的字符，已拒绝写入命令")
+        text = text.replace("{{" + str(key) + "}}", sval)
+    return text
 
 
 def create_workflow(name: str, steps: list[dict], description: str = "") -> dict:
@@ -42,9 +64,9 @@ def list_workflows() -> list[dict]:
     """列出所有工作流"""
     _ensure_dir()
     workflows = []
-    for f in os.listdir(WORKFLOW_DIR):
+    for f in os.listdir(_workflow_dir()):
         if f.endswith(".json"):
-            with open(os.path.join(WORKFLOW_DIR, f), "r", encoding="utf-8") as fh:
+            with open(os.path.join(_workflow_dir(), f), "r", encoding="utf-8") as fh:
                 workflows.append(json.load(fh))
     return workflows
 
@@ -82,10 +104,7 @@ def run_workflow(name: str, params: Optional[dict] = None) -> dict:
 
         try:
             if step_type == "command":
-                cmd = step.get("command", "")
-                if params:
-                    for k, v in params.items():
-                        cmd = cmd.replace(f"{{{{{k}}}}}", str(v))
+                cmd = _subst(step.get("command", ""), params)
                 proc = subprocess.run(cmd, shell=True, capture_output=True, text=True,
                                       encoding="utf-8", timeout=60)
                 result["status"] = "success" if proc.returncode == 0 else "failed"
@@ -94,20 +113,15 @@ def run_workflow(name: str, params: Optional[dict] = None) -> dict:
                 context[f"step_{i+1}_output"] = proc.stdout.strip()
 
             elif step_type == "python":
-                code = step.get("code", "")
-                if params:
-                    for k, v in params.items():
-                        code = code.replace(f"{{{{{k}}}}}", str(v))
-                proc = subprocess.run(["python", "-c", code], capture_output=True,
+                code = _subst(step.get("code", ""), params)
+                proc = subprocess.run([os.environ.get("MARVIS_PYTHON", "python3"), "-c", code],
+                                      capture_output=True,
                                       text=True, encoding="utf-8", timeout=60)
                 result["status"] = "success" if proc.returncode == 0 else "failed"
                 result["output"] = proc.stdout[:500] if proc.stdout else ""
 
             elif step_type == "powershell":
-                ps = step.get("command", "")
-                if params:
-                    for k, v in params.items():
-                        ps = ps.replace(f"{{{{{k}}}}}", str(v))
+                ps = _subst(step.get("command", ""), params)
                 with tempfile.NamedTemporaryFile(mode="w", suffix=".ps1",
                                                   encoding="utf-8-sig", delete=False) as tf:
                     tf.write(ps)

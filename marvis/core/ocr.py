@@ -73,10 +73,11 @@ def search_by_text(results: list[dict], keyword: str) -> list[dict]:
     matches = []
     kw = keyword.lower()
     for r in results:
-        if kw in r["text"].lower():
+        text = r.get("text") or ""
+        if kw in text.lower():
             # 查找匹配行
             match_lines = [
-                line.strip() for line in r["text"].split("\n")
+                line.strip() for line in text.split("\n")
                 if kw in line.lower()
             ]
             matches.append({**r, "match_lines": match_lines})

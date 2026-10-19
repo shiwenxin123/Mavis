@@ -19,7 +19,7 @@
 | AI 文档库 | 构建个人知识库，自动打标签 | `marvis knowledge --mode doc-library` |
 | 系统管理 | 系统信息/进程/服务/磁盘/防火墙 | `marvis system info` |
 | 系统清理 | 扫描并清理临时文件/缓存 | `marvis system clean` |
-| 网络修复 | 刷新 DNS / 重置 Winsock / 重置 IP | `marvis system repair` |
+| 网络修复 | 默认只预览；`--execute` 后才刷新 DNS / 重置 Winsock | `marvis system repair` |
 | 图片 OCR | 提取图片文字，关键词搜索 | `marvis ocr` |
 | 格式转换 | PDF/DOCX/XLSX/CSV/JSON/Markdown 互转 | `marvis convert` |
 | 定时任务 | 定时执行脚本/提醒/监控 | `marvis workflow` |
@@ -36,8 +36,8 @@
 
 ### 运行模式
 
-- **效率模式**（默认）：可调用外部 API，适合非敏感任务
-- **本地模式**：所有文件不离开本机，不调用外部 API，保护隐私
+- **效率模式**（默认）：网页工具可以访问外部网络，适合非敏感任务
+- **本地模式**：不访问外部网络。`marvis --local …`，或设置 `MARVIS_MODE=local`，或在 `~/.marvis/config.json` 写 `{"mode": "local"}`
 
 ## 📦 安装
 
@@ -55,6 +55,11 @@ pip install -e ".[mcp]"
 
 # 仅安装 OCR 支持
 pip install -e ".[ocr]"
+
+# 开发与测试（推送后 GitHub Actions 会在 Python 3.10–3.13 上跑同样的检查）
+pip install -e ".[dev]"
+pytest
+marvis doctor
 ```
 
 ### 方式二：Codex Skill 安装
@@ -91,14 +96,22 @@ OCR 额外需要安装 [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/
 ### CLI
 
 ```bash
+# 看看当前装了什么、是不是本地模式
+marvis doctor
+
 # 搜索文件
 marvis search ~/Documents --keyword 合同 --ext .pdf
 
 # 系统信息
 marvis system info
 
-# 清理垃圾
+# 清理扫描（只列出可清理项，不删除）
 marvis system clean
+
+# 网络修复默认只预览
+marvis system repair
+# 确认后再执行
+marvis system repair --execute
 
 # 合同审查
 marvis analyze contract.pdf --action contract
@@ -106,14 +119,17 @@ marvis analyze contract.pdf --action contract
 # 项目分析
 marvis project ~/myproject --action scan
 
-# 安全巡检
+# 安全巡检（报告文件位置和类型，不打印密钥正文）
 marvis security ~/myproject --action full
 
-# 批量重命名
+# 批量重命名（默认预览，确认后加 --execute）
 marvis batch rename ~/photos --pattern date-prefix --execute
 
 # 查看工作流模板
 marvis workflow templates
+
+# 本地模式：下面这条会拒绝访问网络
+marvis --local web search --query 关键词
 ```
 
 ### MCP 服务器
@@ -147,7 +163,7 @@ from marvis.core.doc_analyzer import contract_review, generate_chart
 from marvis.core.system_manager import sys_info, system_clean, net_repair
 from marvis.core.security_audit import full_audit
 from marvis.core.project_scanner import scan_project
-from marvis.core.workflow import run_workflow, builtin_workflows
+from marvis.core.workflow import run_workflow, builtin_templates
 ```
 
 ### Codex Skill
@@ -207,7 +223,7 @@ marvis/
 
 ## 🔌 多平台适配
 
-Marvis v2 支持多种 AI 编码工具：
+Marvis v2.1 支持多种 AI 编码工具：
 
 | 平台 | 适配方式 | 配置文件 |
 |------|---------|---------|
@@ -220,11 +236,13 @@ Marvis v2 支持多种 AI 编码工具：
 ## 🛡️ 安全准则
 
 - 文件整理/批量操作默认**预览模式**，不直接执行
+- 网络修复（`marvis system repair` / MCP `net_repair`）默认只预览，确认后加 `--execute`
 - 任何删除操作必须经用户确认
 - 不修改系统关键注册表路径
 - 系统修改前说明具体变更和影响
-- 本地模式下不访问外部网络和 API
-- 安全巡检仅做检测，不自动修复
+- 本地模式下不访问外部网络和 API（网页搜索、读取、监控、URL 探活都会拒绝）
+- 安全巡检仅做检测，不自动修复，也不把密钥正文写进结果
+- 进程列表只显示程序名，命令行里的 token / 密钥样式文本会打码
 
 ## 🤝 致谢
 

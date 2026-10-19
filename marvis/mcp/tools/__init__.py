@@ -18,9 +18,20 @@ from marvis.core.project_scanner import scan_project, generate_readme
 from marvis.core.security_audit import full_audit, check_sensitive_files, check_open_ports
 from marvis.core.batch_processor import batch_rename, compress_images, merge_pdfs
 from marvis.core.workflow import create_workflow, list_workflows, run_workflow, builtin_templates
+from marvis.core.doctor import doctor as run_doctor
 
 
 # ──── Tool handler registry ────
+
+def _search_payload(result: dict, key: str) -> dict:
+    if result.get("error"):
+        return result
+    return {
+        "count": result.get("count", 0),
+        key: result.get("results", []),
+        "mode": result.get("mode"),
+    }
+
 
 def handle_search_files(args: dict) -> dict:
     """按文件名/大小/时间搜索文件"""
@@ -30,25 +41,26 @@ def handle_search_files(args: dict) -> dict:
         keyword=args.get("keyword"),
         pattern=args.get("pattern"),
         ext=args.get("ext"),
-        min_size=args.get("min_size"),
-        max_size=args.get("max_size"),
+        min_size_mb=args.get("min_size_mb", args.get("min_size") or 0) or 0,
+        max_size_mb=args.get("max_size_mb", args.get("max_size") or 0) or 0,
         days=args.get("days"),
         limit=args.get("limit", 50),
     )
-    return {"count": len(result), "files": result}
+    return _search_payload(result, "files")
 
 
 def handle_search_content(args: dict) -> dict:
     """搜索文件内容（关键词/正则）"""
+    mode = "regex" if args.get("pattern") and not args.get("keyword") else args.get("mode", "content")
     result = search(
         root=args.get("root", "."),
-        mode=args.get("mode", "content"),
+        mode=mode,
         keyword=args.get("keyword"),
         pattern=args.get("pattern"),
         ext=args.get("ext"),
         limit=args.get("limit", 30),
     )
-    return {"count": len(result), "matches": result}
+    return _search_payload(result, "matches")
 
 
 def handle_read_document(args: dict) -> dict:
@@ -128,38 +140,45 @@ def handle_search_library(args: dict) -> dict:
 
 def handle_system_info(args: dict) -> dict:
     """系统信息"""
-    info = sys_info()
-    return {"system": json.loads(info) if info else {"error": "无法获取系统信息"}}
+    return {"system": sys_info()}
 
 
 def handle_network_info(args: dict) -> dict:
     """网络信息"""
-    info = net_info()
-    return {"network": json.loads(info) if info else {"error": "无法获取网络信息"}}
+    return {"network": net_info()}
 
 
 def handle_process_list(args: dict) -> dict:
     """进程列表"""
-    procs = process_list(args.get("sort_by", "cpu"), args.get("limit", 20))
-    return {"processes": json.loads(procs) if procs else []}
+    return {"processes": process_list(args.get("sort_by", "cpu"), args.get("limit", 20))}
 
 
 def handle_disk_usage(args: dict) -> dict:
     """磁盘使用"""
-    usage = disk_usage()
-    return {"disks": json.loads(usage) if usage else []}
+    return {"disks": disk_usage()}
 
 
 def handle_port_check(args: dict) -> dict:
     """端口检查"""
-    result = port_check(args["port"], args.get("host", "127.0.0.1"))
-    return {"port_check": json.loads(result) if result else {}}
+    if "port" not in args:
+        return {"error": "缺少参数: port"}
+    return {"port_check": port_check(args["port"], args.get("host", "127.0.0.1"))}
 
 
 def handle_system_clean(args: dict) -> dict:
-    """扫描可清理项"""
-    result = system_clean()
-    return {"clean_items": json.loads(result) if result else []}
+    """扫描可清理项（只扫描，不删除）"""
+    return {"clean_items": system_clean()}
+
+
+def handle_net_repair(args: dict) -> dict:
+    """网络修复。默认预览，execute=true 才会在 Windows 上执行。"""
+    execute = bool(args.get("execute", False))
+    return {"preview": not execute, "steps": net_repair(execute=execute)}
+
+
+def handle_doctor(args: dict) -> dict:
+    """环境自检"""
+    return run_doctor()
 
 
 def handle_ocr_image(args: dict) -> dict:
@@ -182,9 +201,12 @@ def handle_ocr_search(args: dict) -> dict:
 
 def handle_convert_format(args: dict) -> dict:
     """文件格式转换"""
+    if "path" not in args:
+        return {"error": "缺少参数: path"}
+    output_format = args.get("format") or args.get("output_format") or "json"
     result = convert(
         args["path"],
-        args.get("output_format", "json"),
+        output_format,
         args.get("output_path"),
     )
     return {"converted": result}
@@ -323,6 +345,8 @@ TOOL_REGISTRY = {
     "disk_usage": handle_disk_usage,
     "port_check": handle_port_check,
     "system_clean": handle_system_clean,
+    "net_repair": handle_net_repair,
+    "doctor": handle_doctor,
     "ocr_image": handle_ocr_image,
     "ocr_search": handle_ocr_search,
     "convert_format": handle_convert_format,
@@ -557,7 +581,17 @@ ALL_TOOLS: list[dict] = [
     },
     {
         "name": "net_repair",
-        "description": "网络修复（刷新DNS/重置Winsock）",
+        "description": "网络修复预览。默认不执行；仅 Windows 且 execute=true 时才会改网络",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "execute": {"type": "boolean", "default": False, "description": "确认后才真正执行"},
+            },
+        },
+    },
+    {
+        "name": "doctor",
+        "description": "检查 Marvis 版本、可选依赖、本地模式和危险操作默认值。不扫描文件、不访问网络",
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
@@ -777,14 +811,22 @@ ALL_TOOLS: list[dict] = [
 ]
 
 
-def execute_tool(name: str, arguments: dict) -> str:
+def execute_tool(name: str, arguments: dict | None = None) -> str:
     """执行 MCP Tool 调用，返回 JSON 字符串"""
-    handler = TOOL_REGISTRY.get(name)
-    if not handler:
-        result = {"error": f"未知工具: {name}"}
+    if arguments is None:
+        arguments = {}
+    if not isinstance(arguments, dict):
+        result: Any = {"error": "参数必须是 JSON 对象"}
     else:
-        try:
-            result = handler(arguments)
-        except Exception as e:
-            result = {"error": str(e)}
+        handler = TOOL_REGISTRY.get(name)
+        if not handler:
+            result = {"error": f"未知工具: {name}"}
+        else:
+            try:
+                result = handler(arguments)
+            except KeyError as exc:
+                missing = exc.args[0] if exc.args else exc
+                result = {"error": f"缺少参数: {missing}"}
+            except Exception as exc:
+                result = {"error": str(exc)[:500]}
     return json.dumps(result, ensure_ascii=False, default=str)

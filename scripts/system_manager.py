@@ -210,21 +210,26 @@ $results | ConvertTo-Json
     return out
 
 
-def net_repair():
-    """网络修复 - 刷新 DNS、重置网络适配器等"""
+def net_repair(execute=False):
+    """网络修复。默认只预览，--execute 才会改本机网络。"""
+    planned = [
+        ("刷新DNS缓存", "ipconfig /flushdns"),
+        ("释放IP地址", "ipconfig /release"),
+        ("重新获取IP", "ipconfig /renew"),
+        ("重置Winsock", "netsh winsock reset"),
+        ("重置IP配置", "netsh int ip reset"),
+        ("重新注册DNS", "ipconfig /registerdns"),
+    ]
+    if not execute:
+        steps = [
+            {"step": name, "command": cmd, "status": "preview", "note": "未执行。确认后加 --execute"}
+            for name, cmd in planned
+        ]
+        return json.dumps(steps, ensure_ascii=False, indent=2)
     steps = []
-    out1, err1, rc1 = run_ps("ipconfig /flushdns")
-    steps.append({"step": "刷新DNS缓存", "success": rc1 == 0, "output": out1})
-    out2, err2, rc2 = run_ps("ipconfig /release")
-    steps.append({"step": "释放IP地址", "success": rc2 == 0, "output": out2})
-    out3, err3, rc3 = run_ps("ipconfig /renew")
-    steps.append({"step": "重新获取IP", "success": rc3 == 0, "output": out3})
-    out4, err4, rc4 = run_ps("netsh winsock reset")
-    steps.append({"step": "重置Winsock", "success": rc4 == 0, "output": out4})
-    out5, err5, rc5 = run_ps("netsh int ip reset")
-    steps.append({"step": "重置IP配置", "success": rc5 == 0, "output": out5})
-    out6, err6, rc6 = run_ps("ipconfig /registerdns")
-    steps.append({"step": "重新注册DNS", "success": rc6 == 0, "output": out6})
+    for name, cmd in planned:
+        out, err, rc = run_ps(cmd)
+        steps.append({"step": name, "success": rc == 0, "output": (out or err)[:300]})
     return json.dumps(steps, ensure_ascii=False, indent=2)
 
 
@@ -243,6 +248,7 @@ def main():
     parser.add_argument("--port", type=int, help="检查端口号")
     parser.add_argument("--host", default="127.0.0.1", help="检查端口主机")
     parser.add_argument("--direction", choices=["Inbound", "Outbound"], help="防火墙规则方向")
+    parser.add_argument("--execute", action="store_true", help="确认执行网络修复（默认只预览）")
 
     args = parser.parse_args()
 
@@ -273,7 +279,7 @@ def main():
         elif args.action == "system-clean":
             print(system_clean())
         elif args.action == "net-repair":
-            print(net_repair())
+            print(net_repair(execute=args.execute))
     except subprocess.TimeoutExpired:
         print("错误: 命令执行超时", file=sys.stderr)
         sys.exit(1)

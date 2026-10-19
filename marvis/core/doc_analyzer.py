@@ -17,6 +17,17 @@ from marvis.utils.fs import safe_read
 # ─── 可选依赖 ───────────────────────────────────────────
 
 _MISSING = {}
+_last_read_error: Optional[str] = None
+
+def get_last_read_error() -> Optional[str]:
+    """最近一次 read_file 失败的原因，供 CLI 展示。"""
+    return _last_read_error
+
+
+def _fail_read(message: str) -> None:
+    global _last_read_error
+    _last_read_error = message
+
 
 def _ensure(lib_name: str, pip_name: Optional[str] = None) -> bool:
     pn = pip_name or lib_name
@@ -32,10 +43,16 @@ def _ensure(lib_name: str, pip_name: Optional[str] = None) -> bool:
 
 def read_file(filepath: str) -> Optional[str]:
     """读取文件内容，支持 PDF/DOCX/XLSX/CSV/TXT"""
+    global _last_read_error
+    _last_read_error = None
+    if not os.path.isfile(filepath):
+        _fail_read(f"文件不存在: {filepath}")
+        return None
     ext = os.path.splitext(filepath)[1].lower()
 
     if ext == '.pdf':
         if not _ensure('pdfplumber'):
+            _fail_read("需要安装 pdfplumber。运行: pip install 'marvis[full]'")
             return None
         import pdfplumber
         parts = []
@@ -48,6 +65,7 @@ def read_file(filepath: str) -> Optional[str]:
 
     elif ext in ('.docx', '.doc'):
         if not _ensure('docx', 'python-docx'):
+            _fail_read("需要安装 python-docx。运行: pip install 'marvis[full]'")
             return None
         from docx import Document
         doc = Document(filepath)
@@ -60,6 +78,7 @@ def read_file(filepath: str) -> Optional[str]:
 
     elif ext in ('.xlsx', '.xls'):
         if not _ensure('openpyxl'):
+            _fail_read("需要安装 openpyxl。运行: pip install 'marvis[full]'")
             return None
         import openpyxl
         wb = openpyxl.load_workbook(filepath, read_only=True)
@@ -68,11 +87,11 @@ def read_file(filepath: str) -> Optional[str]:
             ws = wb[sheet_name]
             parts.append(f"## Sheet: {sheet_name}")
             for i, row in enumerate(ws.iter_rows(values_only=True)):
+                if i > 500:
+                    parts.append('... (已截断)')
+                    break
                 cells = [str(c) if c is not None else '' for c in row]
                 parts.append(' | '.join(cells))
-            if i > 500:
-                parts.append('... (已截断)')
-                break
         wb.close()
         return '\n'.join(parts)
 
@@ -81,7 +100,10 @@ def read_file(filepath: str) -> Optional[str]:
             return f.read()
 
     else:
-        return safe_read(filepath)
+        text = safe_read(filepath)
+        if text is None:
+            _fail_read("无法读取文件（空文件、过大或没有读取权限）")
+        return text
 
 
 # ─── 合同审查 ───────────────────────────────────────────

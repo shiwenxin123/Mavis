@@ -41,7 +41,7 @@ description: 智能文件搜索、深度理解、整理归档、系统管理、�
 
 ### 7. 系统清理 + 网络修复
 - 系统清理：`system_manager.py --action system-clean` 扫描临时文件/缓存
-- 网络修复：`system_manager.py --action net-repair` 刷新DNS/重置Winsock
+- 网络修复：`system_manager.py --action net-repair` 默认只预览；确认后加 `--execute` 才会刷新 DNS / 重置 Winsock
 
 ### 8. 图片 OCR 搜索
 提取图片文字，关键词搜索图片。使用 `scripts/ocr_search.py`。

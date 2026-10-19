@@ -10,6 +10,7 @@ Marvis 安全巡检 — 敏感文件扫描、端口检查、账户审计、防�
 
 import json
 import os
+import platform
 import re
 import subprocess
 import tempfile
@@ -17,7 +18,9 @@ from typing import Optional
 
 
 def _run_ps(script: str, timeout: int = 30) -> tuple:
-    """运行 PowerShell 脚本"""
+    """运行 PowerShell 脚本。非 Windows 直接返回，不抛异常。"""
+    if platform.system() != "Windows":
+        return "", "PowerShell 不可用", -1
     with tempfile.NamedTemporaryFile(mode="w", suffix=".ps1", encoding="utf-8-sig", delete=False) as f:
         f.write(script)
         tmp = f.name
@@ -27,6 +30,8 @@ def _run_ps(script: str, timeout: int = 30) -> tuple:
             capture_output=True, text=True, encoding="utf-8", timeout=timeout,
         )
         return result.stdout.strip(), result.stderr.strip(), result.returncode
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return "", str(exc), -1
     finally:
         try:
             os.unlink(tmp)
@@ -90,6 +95,7 @@ def check_sensitive_files(root: str) -> list[dict]:
                 for pattern, desc, severity in SENSITIVE_PATTERNS:
                     matches = re.findall(pattern, content, re.IGNORECASE)
                     if matches:
+                        # 只报告类型和次数，不把密钥正文写进结果
                         findings.append({
                             "type": "敏感内容", "file": rel,
                             "detail": desc, "severity": severity,
@@ -118,112 +124,275 @@ def _assess_port_risk(port: int, address: str) -> dict:
     return {"level": "低", "reason": "未知服务"}
 
 
-def check_open_ports() -> list[dict]:
-    """检查本机监听端口"""
-    out, _, _ = _run_ps("Get-NetTCPConnection -State Listen | Select-Object LocalAddress, LocalPort, OwningProcess | Sort-Object LocalPort | ConvertTo-Json")
+def _parse_ss_listeners(text: str) -> list[dict]:
+    result = []
+    seen = set()
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        local = parts[3]
+        if local.startswith("["):
+            # [::]:22 或 [::1]:22
+            host, _, port_s = local.rpartition(":")
+        elif ":" in local:
+            host, port_s = local.rsplit(":", 1)
+        else:
+            continue
+        try:
+            port = int(port_s)
+        except ValueError:
+            continue
+        key = (host, port)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append({
+            "address": host,
+            "port": port,
+            "pid": None,
+            "process": "",
+            "risk": _assess_port_risk(port, host),
+        })
+    return result
+
+
+def _parse_proc_net_tcp(path: str = "/proc/net/tcp") -> list[dict]:
+    result = []
+    seen = set()
+    try:
+        with open(path, "r", encoding="utf-8", errors="ignore") as handle:
+            lines = handle.readlines()[1:]
+    except OSError:
+        return []
+    for line in lines:
+        cols = line.split()
+        if len(cols) < 4 or cols[3] != "0A":
+            continue
+        ip_hex, port_hex = cols[1].split(":")
+        try:
+            raw = bytes.fromhex(ip_hex)
+            address = ".".join(str(b) for b in reversed(raw))
+            port = int(port_hex, 16)
+        except ValueError:
+            continue
+        key = (address, port)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append({
+            "address": address,
+            "port": port,
+            "pid": None,
+            "process": "",
+            "risk": _assess_port_risk(port, address),
+        })
+    return result
+
+
+def _windows_open_ports() -> list[dict]:
+    out, _, _ = _run_ps(
+        "Get-NetTCPConnection -State Listen | "
+        "Select-Object LocalAddress, LocalPort, OwningProcess | "
+        "Sort-Object LocalPort | ConvertTo-Json"
+    )
     if not out:
         return []
     try:
         ports = json.loads(out)
-        if isinstance(ports, dict):
-            ports = [ports]
-        result = []
-        seen = set()
-        for p in ports:
-            key = (p.get("LocalAddress", ""), p.get("LocalPort", 0))
-            if key in seen:
-                continue
-            seen.add(key)
-            pid = p.get("OwningProcess", 0)
-            proc_name = ""
-            if pid:
-                try:
-                    proc = subprocess.run(
-                        ["powershell", "-NoProfile", "-Command",
-                         f"(Get-Process -Id {pid} -ErrorAction SilentlyContinue).ProcessName"],
-                        capture_output=True, text=True, encoding="utf-8", timeout=5)
-                    proc_name = proc.stdout.strip()
-                except Exception:
-                    pass
-            risk = _assess_port_risk(p.get("LocalPort", 0), p.get("LocalAddress", ""))
-            result.append({"address": p.get("LocalAddress", ""), "port": p.get("LocalPort", 0),
-                           "pid": pid, "process": proc_name, "risk": risk})
-        return result
     except json.JSONDecodeError:
         return []
+    if isinstance(ports, dict):
+        ports = [ports]
+    result = []
+    seen = set()
+    for item in ports:
+        address = str(item.get("LocalAddress", ""))
+        try:
+            port = int(item.get("LocalPort", 0))
+        except (TypeError, ValueError):
+            continue
+        key = (address, port)
+        if key in seen:
+            continue
+        seen.add(key)
+        pid = item.get("OwningProcess", 0)
+        try:
+            pid_num = int(pid)
+        except (TypeError, ValueError):
+            pid_num = 0
+        result.append({
+            "address": address,
+            "port": port,
+            "pid": pid_num,
+            "process": "",
+            "risk": _assess_port_risk(port, address),
+        })
+    return result
+
+
+def check_open_ports() -> list[dict]:
+    """检查本机监听端口。只读，不把连接信息发往外部。"""
+    if platform.system() == "Windows":
+        return _windows_open_ports()
+    try:
+        proc = subprocess.run(
+            ["ss", "-H", "-lnt"],
+            capture_output=True, text=True, timeout=8,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            return _parse_ss_listeners(proc.stdout)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    return _parse_proc_net_tcp()
+
+
+def _password_statuses() -> dict[str, str]:
+    """一次读取 passwd -Sa。失败时返回空，不读取哈希。"""
+    try:
+        proc = subprocess.run(
+            ["passwd", "-Sa"],
+            capture_output=True, text=True, timeout=8,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return {}
+    statuses = {}
+    for line in proc.stdout.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[1] in {"P", "NP", "L", "LK"}:
+            statuses[parts[0]] = parts[1]
+    return statuses
+
+
+def _posix_user_accounts() -> list[dict]:
+    import pwd
+
+    statuses = _password_statuses()
+    result = []
+    for user in pwd.getpwall():
+        if user.pw_uid != 0 and user.pw_uid < 1000:
+            continue
+        status = statuses.get(user.pw_name)
+        risks = []
+        if status == "NP":
+            risks.append("账户未设置密码")
+        result.append({
+            "name": user.pw_name,
+            "enabled": status not in {"L", "LK"},
+            "uid": user.pw_uid,
+            "password_required": None if status is None else status == "P",
+            "risks": risks,
+        })
+    return result
 
 
 def check_user_accounts() -> list[dict]:
-    """检查本地用户账户"""
-    out, _, _ = _run_ps("Get-LocalUser | Select-Object Name, Enabled, Description, PasswordRequired, LastLogon | ConvertTo-Json")
+    """检查本地用户账户。不读取、不回传密码哈希。"""
+    if platform.system() != "Windows":
+        return _posix_user_accounts()
+    out, _, _ = _run_ps(
+        "Get-LocalUser | Select-Object Name, Enabled, Description, "
+        "PasswordRequired, LastLogon | ConvertTo-Json"
+    )
     if not out:
         return []
     try:
         users = json.loads(out)
-        if isinstance(users, dict):
-            users = [users]
-        result = []
-        for u in users:
-            risks = []
-            if u.get("Enabled") and not u.get("PasswordRequired"):
-                risks.append("账户已启用但未要求密码")
-            if u.get("Name", "").lower() in ("admin", "administrator", "root", "test", "guest"):
-                if u.get("Enabled"):
-                    risks.append(f"高危用户名 '{u['Name']}' 已启用")
-            result.append({
-                "name": u.get("Name", ""),
-                "enabled": u.get("Enabled", False),
-                "password_required": u.get("PasswordRequired", True),
-                "last_logon": str(u.get("LastLogon", "")),
-                "risks": risks,
-            })
-        return result
     except json.JSONDecodeError:
         return []
+    if isinstance(users, dict):
+        users = [users]
+    result = []
+    for user in users:
+        risks = []
+        if user.get("Enabled") and not user.get("PasswordRequired"):
+            risks.append("账户已启用但未要求密码")
+        name = str(user.get("Name", ""))
+        if name.lower() in ("admin", "administrator", "root", "test", "guest") and user.get("Enabled"):
+            risks.append(f"高危用户名 '{name}' 已启用")
+        result.append({
+            "name": name,
+            "enabled": user.get("Enabled", False),
+            "password_required": user.get("PasswordRequired", True),
+            "last_logon": str(user.get("LastLogon", "")),
+            "risks": risks,
+        })
+    return result
 
 
 def check_firewall() -> dict:
-    """检查防火墙状态"""
-    ps = """
+    """检查防火墙状态。只读查询，不改规则。"""
+    if platform.system() == "Windows":
+        out, _, _ = _run_ps("""
 @{
     Domain = (Get-NetFirewallProfile -Profile Domain).Enabled
     Private = (Get-NetFirewallProfile -Profile Private).Enabled
     Public = (Get-NetFirewallProfile -Profile Public).Enabled
 } | ConvertTo-Json
-"""
-    out, _, _ = _run_ps(ps)
-    try:
-        return json.loads(out)
-    except json.JSONDecodeError:
+""")
+        try:
+            data = json.loads(out)
+        except json.JSONDecodeError:
+            return {"error": "无法获取防火墙状态"}
+        if isinstance(data, dict):
+            return data
         return {"error": "无法获取防火墙状态"}
+
+    try:
+        proc = subprocess.run(
+            ["ufw", "status"],
+            capture_output=True, text=True, timeout=8,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        proc = None
+    if proc is not None and proc.returncode == 0 and proc.stdout.strip():
+        first = proc.stdout.strip().splitlines()[0][:200]
+        return {
+            "tool": "ufw",
+            "enabled": "inactive" not in first.lower(),
+            "summary": first,
+        }
+    return {
+        "tool": None,
+        "enabled": None,
+        "note": "未检测到 ufw。未改动防火墙。",
+    }
 
 
 def check_windows_update() -> str:
     """检查 Windows 更新状态"""
-    ps = """
+    if platform.system() != "Windows":
+        return "不适用（非 Windows）"
+    out, _, _ = _run_ps("""
 $sess = New-Object -ComObject Microsoft.Update.Session
 $searcher = $sess.CreateUpdateSearcher()
 $result = $searcher.Search("IsInstalled=0")
 @{
     PendingUpdates = $result.Updates.Count
 } | ConvertTo-Json
-"""
-    out, _, _ = _run_ps(ps)
+""")
     try:
         data = json.loads(out)
         return f"待更新: {data.get('PendingUpdates', '?')} 个"
     except Exception:
-        return out or "无法获取更新状态"
+        return "无法获取更新状态"
 
 
 def full_audit(root: Optional[str] = None) -> dict:
-    """执行完整安全巡检"""
-    if root is None:
-        root = os.getcwd()
-    return {
-        "sensitive_files": check_sensitive_files(os.path.abspath(root)),
-        "open_ports": check_open_ports(),
-        "user_accounts": check_user_accounts(),
-        "firewall": check_firewall(),
-        "windows_update": check_windows_update(),
-    }
+    """执行完整安全巡检。单项失败不影响其余结果，也不外传文件内容。"""
+    root = os.path.abspath(root or os.getcwd())
+    report: dict = {"root": root, "notes": []}
+    checks = (
+        ("sensitive_files", lambda: check_sensitive_files(root)),
+        ("open_ports", check_open_ports),
+        ("user_accounts", check_user_accounts),
+        ("firewall", check_firewall),
+        ("windows_update", check_windows_update),
+    )
+    for name, fn in checks:
+        try:
+            report[name] = fn()
+        except Exception as exc:
+            report[name] = [] if name != "firewall" else {}
+            report["notes"].append(f"{name} 检查失败: {exc}")
+    return report

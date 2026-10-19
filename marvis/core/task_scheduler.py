@@ -7,41 +7,56 @@ Marvis 定时任务与自动化 — 创建/管理/执行定时任务，支持 Wi
 
 import json
 import os
+import platform
+import re
 import subprocess
 import tempfile
 from datetime import datetime
 from typing import Optional
 
 
-TASK_DIR = os.path.join(os.path.expanduser("~"), ".marvis", "tasks")
+def _task_dir() -> str:
+    from marvis.utils.config import marvis_home
+    return str(marvis_home() / "tasks")
 
 
 def _ensure_dir():
-    os.makedirs(TASK_DIR, exist_ok=True)
+    os.makedirs(_task_dir(), exist_ok=True)
+
+
+def _safe_name(name: str) -> str:
+    return "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
 
 
 def _task_file(name: str) -> str:
-    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
-    return os.path.join(TASK_DIR, f"{safe}.json")
+    return os.path.join(_task_dir(), f"{_safe_name(name)}.json")
+
+
+_WEEKDAYS = {
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+}
 
 
 def _parse_schedule(schedule: str) -> str:
-    """解析定时规则为 PowerShell 触发器"""
-    parts = schedule.lower().split(":")
-    if parts[0] == "daily" and len(parts) >= 2:
-        return f"New-ScheduledTaskTrigger -Daily -At '{parts[1]}'"
-    elif parts[0] == "hourly":
+    """解析定时规则为 PowerShell 触发器。只接受固定格式，避免拼进脚本。"""
+    text = (schedule or "").strip()
+    daily = re.fullmatch(r"daily:(\d{2}:\d{2})", text, re.IGNORECASE)
+    if daily:
+        return f"New-ScheduledTaskTrigger -Daily -At '{daily.group(1)}'"
+    if re.fullmatch(r"hourly", text, re.IGNORECASE):
         return "New-ScheduledTaskTrigger -Once -RepetitionInterval (New-TimeSpan -Hours 1)"
-    elif parts[0] == "every" and len(parts) >= 2:
-        interval = parts[1]
-        if "min" in interval:
-            mins = int(interval.replace("min", ""))
-            return f"New-ScheduledTaskTrigger -Once -RepetitionInterval (New-TimeSpan -Minutes {mins})"
-        elif "h" in interval:
-            hrs = int(interval.replace("h", ""))
-            return f"New-ScheduledTaskTrigger -Once -RepetitionInterval (New-TimeSpan -Hours {hrs})"
-    elif parts[0] == "weekly" and len(parts) >= 3:
-        return f"New-ScheduledTaskTrigger -Weekly -DaysOfWeek {parts[1].capitalize()} -At '{parts[2]}'"
+    every = re.fullmatch(r"every:(\d{1,4})(min|h)", text, re.IGNORECASE)
+    if every:
+        amount = max(1, min(int(every.group(1)), 10080))
+        unit = "Minutes" if every.group(2).lower() == "min" else "Hours"
+        return (
+            "New-ScheduledTaskTrigger -Once -RepetitionInterval "
+            f"(New-TimeSpan -{unit} {amount})"
+        )
+    weekly = re.fullmatch(r"weekly:([A-Za-z]+):(\d{2}:\d{2})", text)
+    if weekly and weekly.group(1).lower() in _WEEKDAYS:
+        day = weekly.group(1).capitalize()
+        return f"New-ScheduledTaskTrigger -Weekly -DaysOfWeek {day} -At '{weekly.group(2)}'"
     return "New-ScheduledTaskTrigger -Daily -At '09:00'"
 
 
@@ -54,8 +69,9 @@ def create_task(
     keyword: Optional[str] = None,
     watch_path: Optional[str] = None,
     description: Optional[str] = None,
+    register: bool = False,
 ) -> dict:
-    """创建定时任务"""
+    """创建定时任务。默认只保存定义，不注册系统计划任务。"""
     _ensure_dir()
     task = {
         "name": name,
@@ -71,44 +87,56 @@ def create_task(
         "last_status": None,
         "run_count": 0,
     }
+    if schedule and register:
+        task["scheduler"] = _register_scheduled_task(
+            name, schedule, command, task_type, url, keyword, watch_path
+        )
+    elif schedule:
+        task["scheduler"] = "未注册系统计划任务。默认只保存定义；确认后传入 register=True"
     path = _task_file(name)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(task, f, ensure_ascii=False, indent=2)
-
-    if schedule:
-        _register_scheduled_task(name, schedule, command, task_type, url, keyword, watch_path)
-
     return task
 
 
 def _register_scheduled_task(name, schedule, command, task_type, url, keyword, watch_path):
-    """注册 Windows 任务计划程序"""
+    """注册 Windows 任务计划程序。命令写入受控脚本，不拼进 PowerShell 字符串。"""
+    if platform.system() != "Windows":
+        return "当前系统无 Windows 任务计划程序，仅保存本地任务"
+    if command and any(ch in command for ch in "\n\r\x00"):
+        return "命令包含换行或空字符，已拒绝注册系统计划任务"
+    safe = "Marvis_" + _safe_name(name)
+    script_path = os.path.join(_task_dir(), safe + ".cmd")
     if task_type == "script" and command:
-        exec_cmd = command
-    elif task_type == "url-ping" and url:
-        exec_cmd = f'powershell -Command "Invoke-WebRequest -Uri \'{url}\' -UseBasicParsing | Select-Object StatusCode"'
+        payload = command
     elif task_type == "remind":
-        exec_cmd = f'powershell -Command "Add-Type -AssemblyName PresentationFramework; [System.Windows.MessageBox]::Show(\'{command or name}\', \'Marvis 提醒\')"'
+        payload = "echo Marvis reminder"
     else:
-        exec_cmd = f'python -c "from marvis.core.task_scheduler import run_task; run_task(\'{name}\')"'
-
-    trigger = _parse_schedule(schedule)
-    safe_name = "Marvis_" + "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
-
+        payload = (
+            "python -c \"from marvis.core.task_scheduler import run_task; "
+            f"run_task({json.dumps(name)})\""
+        )
+    with open(script_path, "w", encoding="utf-8", newline="\r\n") as handle:
+        handle.write(payload + "\r\n")
+    trigger = _parse_schedule(schedule or "")
+    quoted = script_path.replace("'", "''")
     ps_script = f"""
-$action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c {exec_cmd}'
+$action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c ""{quoted}""'
 $trigger = {trigger}
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
-Register-ScheduledTask -TaskName '{safe_name}' -Action $action -Trigger $trigger -Settings $settings -Description 'Marvis auto task: {name}' -Force
+Register-ScheduledTask -TaskName '{safe}' -Action $action -Trigger $trigger -Settings $settings -Description 'Marvis auto task' -Force
 """
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".ps1", encoding="utf-8-sig", delete=False) as f:
-        f.write(ps_script)
-        tmp = f.name
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".ps1", encoding="utf-8-sig", delete=False) as handle:
+        handle.write(ps_script)
+        tmp = handle.name
     try:
         subprocess.run(
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", tmp],
             capture_output=True, text=True, encoding="utf-8", timeout=15,
         )
+        return "已尝试注册系统计划任务"
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return f"注册失败: {exc}"
     finally:
         try:
             os.unlink(tmp)
@@ -120,9 +148,9 @@ def list_tasks() -> list[dict]:
     """列出所有任务"""
     _ensure_dir()
     tasks = []
-    for f in os.listdir(TASK_DIR):
+    for f in os.listdir(_task_dir()):
         if f.endswith(".json"):
-            with open(os.path.join(TASK_DIR, f), "r", encoding="utf-8") as fh:
+            with open(os.path.join(_task_dir(), f), "r", encoding="utf-8") as fh:
                 tasks.append(json.load(fh))
     return tasks
 
@@ -139,22 +167,25 @@ def get_task(name: str) -> Optional[dict]:
 def delete_task(name: str) -> bool:
     """删除任务（包括 Windows 任务计划程序中的注册）"""
     path = _task_file(name)
-    safe_name = "Marvis_" + "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
+    safe_name = "Marvis_" + _safe_name(name)
 
-    ps_script = f"Unregister-ScheduledTask -TaskName '{safe_name}' -Confirm:$false"
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".ps1", encoding="utf-8-sig", delete=False) as f:
-        f.write(ps_script)
-        tmp = f.name
-    try:
-        subprocess.run(
-            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", tmp],
-            capture_output=True, text=True, encoding="utf-8", timeout=10,
-        )
-    finally:
+    if platform.system() == "Windows":
+        ps_script = f"Unregister-ScheduledTask -TaskName '{safe_name}' -Confirm:$false"
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ps1", encoding="utf-8-sig", delete=False) as handle:
+            handle.write(ps_script)
+            tmp = handle.name
         try:
-            os.unlink(tmp)
-        except OSError:
+            subprocess.run(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", tmp],
+                capture_output=True, text=True, encoding="utf-8", timeout=10,
+            )
+        except (OSError, subprocess.TimeoutExpired):
             pass
+        finally:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
 
     if os.path.isfile(path):
         os.remove(path)
@@ -182,22 +213,17 @@ def run_task(name: str) -> dict:
             result["error"] = proc.stderr[:200] if proc.stderr else None
 
         elif task_type == "url-ping" and task.get("url"):
-            resp = subprocess.run(
-                ["powershell", "-NoProfile", "-Command",
-                 f"(Invoke-WebRequest -Uri '{task['url']}' -UseBasicParsing -TimeoutSec 10).StatusCode"],
-                capture_output=True, text=True, encoding="utf-8", timeout=15,
-            )
-            result["status"] = "success" if "200" in resp.stdout else "failed"
-            result["output"] = f"HTTP {resp.stdout.strip()}"
+            from marvis.core.web_monitor import http_get
+            _body, err, status = http_get(task["url"], timeout=10, read_limit=0)
+            if status == 0:
+                result["status"] = "failed"
+                result["error"] = err
+            else:
+                result["status"] = "success" if status == 200 else "failed"
+                result["output"] = err or f"HTTP {status}"
 
         elif task_type == "remind":
-            msg = task.get("command", name)
-            subprocess.run(
-                ["powershell", "-NoProfile", "-Command",
-                 f"Add-Type -AssemblyName PresentationFramework; "
-                 f"[System.Windows.MessageBox]::Show('{msg}', 'Marvis 提醒')"],
-                capture_output=True, text=True, encoding="utf-8", timeout=30,
-            )
+            msg = str(task.get("command") or name)[:200]
             result["status"] = "success"
             result["output"] = f"提醒: {msg}"
 

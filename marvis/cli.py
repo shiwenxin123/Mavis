@@ -9,7 +9,8 @@ Marvis CLI — 命令行入口。
     marvis system <action> [--port 80] [--execute]
     marvis project <root> [--action scan|readme]
     marvis security <root> [--action full|sensitive-files|ports]
-    marvis workflow <action> [--name myflow]
+    marvis workflow templates
+    marvis workflow run --template 敏感文件卫生 --root <dir> [--output report.txt]
     marvis convert <input> [--format json|csv|markdown]
     marvis batch rename <root> [--pattern date-prefix|lowercase|clean]
     marvis ocr <root> [--keyword text]
@@ -90,9 +91,12 @@ def main(argv=None) -> int:
 
     p_wf = sub.add_parser("workflow", help="工作流")
     p_wf.add_argument("action", choices=["list", "run", "templates", "create", "delete"])
-    p_wf.add_argument("--name", "-n")
-    p_wf.add_argument("--params", help="JSON。create 需要 steps；run 需要参数对象")
-    p_wf.add_argument("--json", action="store_true")
+    p_wf.add_argument("--name", "-n", help="已保存的工作流名称")
+    p_wf.add_argument("--template", "-t", help="直接运行内置模板，例如 敏感文件卫生 或 hygiene")
+    p_wf.add_argument("--root", help="敏感文件卫生要扫描的目录，例如 samples/hygiene")
+    p_wf.add_argument("--output", "-o", help="把可读报告写到新文件；文件已存在则拒绝覆盖")
+    p_wf.add_argument("--params", help="JSON。create 需要 steps；run 可传参数对象")
+    p_wf.add_argument("--json", action="store_true", help="输出 JSON。默认 templates 和卫生报告打印可读文本")
 
     p_conv = sub.add_parser("convert", help="格式转换")
     p_conv.add_argument("input")
@@ -246,14 +250,15 @@ def _dispatch(args) -> int:
 
     if cmd == "workflow":
         from marvis.core.workflow import (
-            builtin_templates, create_workflow, delete_workflow, list_workflows, run_workflow,
+            builtin_templates, create_workflow, delete_workflow, format_templates,
+            list_workflows, run_builtin_template, run_workflow,
         )
         if args.action == "list":
             result = {"workflows": list_workflows()}
         elif args.action == "templates":
             result = builtin_templates()
         elif args.action == "run":
-            result = _run_workflow_cli(args, run_workflow)
+            result = _run_workflow_cli(args, run_workflow, run_builtin_template)
         elif args.action == "create":
             result = _create_workflow_cli(args, create_workflow)
         elif args.action == "delete":
@@ -263,6 +268,18 @@ def _dispatch(args) -> int:
                 result = {"name": args.name, "deleted": delete_workflow(args.name)}
         else:
             result = {"error": "未知工作流操作"}
+        if args.action == "templates" and not args.json and not (isinstance(result, dict) and "error" in result):
+            print(format_templates(result))
+            return 0
+        if (
+            args.action == "run"
+            and not args.json
+            and isinstance(result, dict)
+            and result.get("report")
+            and "error" not in result
+        ):
+            print(result["report"])
+            return 0
         return _output(result, args)
 
     if cmd == "convert":
@@ -363,17 +380,28 @@ def _create_workflow_cli(args, create_workflow) -> dict:
     return create_workflow(args.name, steps, description)
 
 
-def _run_workflow_cli(args, run_workflow) -> dict:
+def _run_workflow_cli(args, run_workflow, run_builtin_template) -> dict:
+    if args.template and args.name:
+        return {"error": "请只指定 --name 或 --template 之一"}
+    params = None
+    if args.params or args.root or args.output:
+        params = {}
+        if args.params:
+            payload, err = _load_json_arg(args.params)
+            if err:
+                return err
+            if not isinstance(payload, dict):
+                return {"error": "run 的 --params 必须是 JSON 对象"}
+            params.update(payload)
+        if args.root:
+            params["root"] = args.root
+        if args.output:
+            params["output"] = args.output
+    if args.template:
+        return run_builtin_template(args.template, params)
     if not args.name:
-        return {"error": "run 需要 --name"}
-    if not args.params:
-        return run_workflow(args.name, None)
-    payload, err = _load_json_arg(args.params)
-    if err:
-        return err
-    if not isinstance(payload, dict):
-        return {"error": "run 的 --params 必须是 JSON 对象"}
-    return run_workflow(args.name, payload)
+        return {"error": "run 需要 --name 或 --template"}
+    return run_workflow(args.name, params)
 
 
 def _emit(result, failed: bool) -> None:

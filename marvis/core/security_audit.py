@@ -60,6 +60,8 @@ SENSITIVE_FILENAMES = {
     ".htpasswd", "wp-config.php",
 }
 
+_SKIP_DIRS = {".git", "node_modules", "__pycache__", "venv", ".venv"}
+
 
 def check_sensitive_files(root: str) -> list[dict]:
     """扫描目录中的敏感文件"""
@@ -68,10 +70,8 @@ def check_sensitive_files(root: str) -> list[dict]:
                 ".woff", ".woff2", ".ttf", ".eot", ".mp3", ".mp4", ".avi",
                 ".zip", ".rar", ".7z", ".gz", ".exe", ".dll", ".so", ".dylib"}
 
-    skip_dirs = {".git", "node_modules", "__pycache__", "venv", ".venv"}
-
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in skip_dirs]
+        dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
         for f in filenames:
             ext = os.path.splitext(f)[1].lower()
             if ext in ext_skip:
@@ -105,6 +105,33 @@ def check_sensitive_files(root: str) -> list[dict]:
             except (PermissionError, OSError):
                 continue
     return findings
+
+
+def summarize_sensitive_files(root: str) -> dict:
+    """只读汇总敏感文件。不返回文件正文，也不改动目录。"""
+    if not isinstance(root, str) or not root.strip() or "\x00" in root:
+        raise ValueError("目录路径无效")
+    abs_root = os.path.abspath(os.path.expanduser(root))
+    if not os.path.isdir(abs_root):
+        raise ValueError(f"目录不存在: {root}")
+    files_scanned = 0
+    for dirpath, dirnames, filenames in os.walk(abs_root):
+        dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
+        files_scanned += len(filenames)
+    findings = check_sensitive_files(abs_root)
+    by_severity = {"高": 0, "中": 0, "低": 0}
+    for item in findings:
+        severity = str(item.get("severity") or "低")
+        by_severity[severity] = by_severity.get(severity, 0) + 1
+    return {
+        "root": abs_root,
+        "files_scanned": files_scanned,
+        "finding_count": len(findings),
+        "by_severity": by_severity,
+        "findings": findings,
+        "preview": True,
+        "deleted": False,
+    }
 
 
 def _assess_port_risk(port: int, address: str) -> dict:

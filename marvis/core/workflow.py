@@ -5,6 +5,10 @@ Marvis 快捷工作流 — 组合操作为可复用流程。
 
 可导入使用：
     from marvis.core.workflow import create_workflow, run_workflow, list_workflows, builtin_templates
+
+直接跑只读模板（不写入工作流存档）：
+    from marvis.core.workflow import run_builtin_template
+    run_builtin_template("敏感文件卫生", {"root": "samples/hygiene"})
 """
 
 import json
@@ -89,16 +93,73 @@ def delete_workflow(name: str) -> bool:
     return False
 
 
-def run_workflow(name: str, params: Optional[dict] = None) -> dict:
-    """执行工作流，支持 {{param}} 模板替换"""
-    wf = get_workflow(name)
-    if not wf:
-        return {"error": f"工作流不存在: {name}"}
+HYGIENE_TEMPLATE = "敏感文件卫生"
+_TEMPLATE_ALIASES = {
+    "hygiene": HYGIENE_TEMPLATE,
+    "sensitive-hygiene": HYGIENE_TEMPLATE,
+}
+_FAILED = {"failed", "error", "timeout"}
+
+
+def resolve_template_name(name: str) -> str:
+    """把 hygiene 这类别名解析成模板名。未知名称原样返回。"""
+    return _TEMPLATE_ALIASES.get(str(name).strip(), str(name).strip())
+
+
+def format_hygiene_report(summary: dict) -> str:
+    """人类可读的只读卫生报告。只包含路径和类型，不包含文件正文。"""
+    lines = [
+        "敏感文件卫生报告",
+        f"目录: {summary.get('root', '')}",
+        "模式: 只读预览（未删除、未修改任何文件，报告不含密钥正文）",
+        f"扫描文件: {summary.get('files_scanned', 0)}",
+        f"发现: {summary.get('finding_count', 0)}",
+        "",
+    ]
+    findings = summary.get("findings") or []
+    if not findings:
+        lines.append("未发现敏感文件名或凭据样式。")
+    else:
+        for item in findings:
+            severity = item.get("severity", "")
+            kind = item.get("type", "")
+            rel = item.get("file", "")
+            detail = item.get("detail", "")
+            extra = f" ×{item['count']}" if item.get("count") else ""
+            lines.append(f"[{severity}] {kind}  {rel}")
+            if detail:
+                lines.append(f"    {detail}{extra}")
+        lines.append("")
+        lines.append("建议: 把凭据移出该目录并加入忽略规则。确认前不要删除；本命令不会改动文件。")
+    return "\n".join(lines)
+
+
+def _write_new_report(path: str, text: str) -> str:
+    """把报告写到新文件。目标已存在时拒绝覆盖。"""
+    if not isinstance(path, str) or not path.strip() or "\x00" in path or "\n" in path or "\r" in path:
+        raise ValueError("报告路径无效")
+    dest = os.path.abspath(os.path.expanduser(path))
+    parent = os.path.dirname(dest)
+    if not parent or not os.path.isdir(parent):
+        raise ValueError(f"报告目录不存在: {parent}")
+    if os.path.isdir(dest):
+        raise ValueError("报告路径是目录")
+    if os.path.exists(dest):
+        raise ValueError(f"报告文件已存在，未覆盖: {dest}")
+    payload = text if text.endswith("\n") else text + "\n"
+    with open(dest, "x", encoding="utf-8") as handle:
+        handle.write(payload)
+    return dest
+
+
+def _run_steps(name: str, steps: list[dict], params: Optional[dict] = None) -> dict:
+    """执行步骤。不写工作流存档。"""
+    from marvis.core.security_audit import summarize_sensitive_files
 
     results = []
     context: dict = {"params": params or {}}
 
-    for i, step in enumerate(wf["steps"]):
+    for i, step in enumerate(steps):
         step_type = step.get("type", "command")
         result = {"step": i + 1, "name": step.get("name", f"Step {i+1}"), "type": step_type}
 
@@ -145,6 +206,24 @@ def run_workflow(name: str, params: Optional[dict] = None) -> dict:
                     result["evaluated"] = str(context[var])
                     result["status"] = "evaluated"
 
+            elif step_type == "hygiene":
+                root = (params or {}).get("root")
+                if not isinstance(root, str) or not root.strip():
+                    raise ValueError("需要 --root 指向要扫描的目录，例如 samples/hygiene")
+                summary = summarize_sensitive_files(root)
+                report = format_hygiene_report(summary)
+                output = (params or {}).get("output")
+                if output:
+                    dest = os.path.abspath(os.path.expanduser(str(output)))
+                    report = f"{report}\n\n报告已写入: {dest}"
+                    context["report_path"] = _write_new_report(str(output), report)
+                context["hygiene_report"] = report
+                context["hygiene_summary"] = summary
+                result["status"] = "success"
+                result["output"] = (
+                    f"扫描 {summary['files_scanned']} 个文件，发现 {summary['finding_count']} 项"
+                )
+
             elif step_type == "notify":
                 msg = step.get("message", "工作流通知")
                 result["status"] = "notified"
@@ -158,24 +237,111 @@ def run_workflow(name: str, params: Optional[dict] = None) -> dict:
 
         results.append(result)
 
-        if step.get("stop_on_error", True) and result.get("status") in ("failed", "error", "timeout"):
+        if step.get("stop_on_error", True) and result.get("status") in _FAILED:
             break
 
-    # 更新执行记录
+    payload = {
+        "workflow": name,
+        "total_steps": len(steps),
+        "executed_steps": len(results),
+        "results": results,
+    }
+    summary = context.get("hygiene_summary")
+    if isinstance(summary, dict):
+        payload.update({
+            "preview": True,
+            "deleted": False,
+            "root": summary.get("root"),
+            "files_scanned": summary.get("files_scanned", 0),
+            "finding_count": summary.get("finding_count", 0),
+            "by_severity": summary.get("by_severity") or {},
+            "findings": summary.get("findings") or [],
+            "report": context.get("hygiene_report") or "",
+        })
+        if context.get("report_path"):
+            payload["report_path"] = context["report_path"]
+    return payload
+
+
+def run_workflow(name: str, params: Optional[dict] = None) -> dict:
+    """执行已保存的工作流，支持 {{param}} 模板替换"""
+    wf = get_workflow(name)
+    if not wf:
+        return {"error": f"工作流不存在: {name}"}
+
+    payload = _run_steps(name, wf["steps"], params)
+
     wf["last_run"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     wf["run_count"] = wf.get("run_count", 0) + 1
     with open(_path(name), "w", encoding="utf-8") as f:
         json.dump(wf, f, ensure_ascii=False, indent=2)
+    return payload
 
-    return {
-        "workflow": name, "total_steps": len(wf["steps"]),
-        "executed_steps": len(results), "results": results,
-    }
+
+def run_builtin_template(name: str, params: Optional[dict] = None) -> dict:
+    """直接运行内置模板，不写入 ~/.marvis/workflows。
+
+    只有标记 runnable 的模板可以走这条路径。带删除或系统改动的模板会被拒绝。
+    """
+    templates = builtin_templates()
+    resolved = resolve_template_name(name)
+    tpl = templates.get(resolved)
+    if tpl is None:
+        known = "、".join(templates)
+        return {"error": f"模板不存在: {name}。可选: {known}"}
+    if not tpl.get("runnable"):
+        runnable = [item for item, body in templates.items() if body.get("runnable")]
+        listed = "、".join(runnable) or "无"
+        return {
+            "error": (
+                f"模板「{resolved}」不能直接运行（可能包含会改动文件或系统的步骤）。"
+                f"可直接运行: {listed}"
+            )
+        }
+    payload = _run_steps(resolved, tpl["steps"], params)
+    payload["template"] = resolved
+    failed = next((step for step in payload["results"] if step.get("status") in _FAILED), None)
+    if failed:
+        payload["error"] = failed.get("error") or f"步骤失败: {failed.get('name')}"
+    return payload
+
+
+def format_templates(templates: Optional[dict] = None) -> str:
+    """内置模板的可读列表。可直接运行的排在前面。"""
+    templates = templates if templates is not None else builtin_templates()
+    lines = ["内置工作流模板", ""]
+    items = sorted(templates.items(), key=lambda kv: (not kv[1].get("runnable"), kv[0]))
+    for name, tpl in items:
+        flag = "  [可直接运行]" if tpl.get("runnable") else ""
+        lines.append(f"{name}{flag}")
+        description = tpl.get("description") or ""
+        if description:
+            lines.append(f"  {description}")
+        usage = tpl.get("usage")
+        if usage:
+            lines.append(f"  {usage}")
+        aliases = tpl.get("aliases") or []
+        if aliases:
+            lines.append(f"  别名: {', '.join(aliases)}")
+        lines.append(f"  步骤: {len(tpl.get('steps') or [])}")
+        lines.append("")
+    lines.append("直接运行只读模板不会改动文件。含删除或系统改动的模板不能用 --template 启动。")
+    return "\n".join(lines)
 
 
 def builtin_templates() -> dict:
     """内置工作流模板"""
     return {
+        HYGIENE_TEMPLATE: {
+            "description": "扫描目录中的敏感文件名和凭据样式，打印可读报告。只读，不删除，不输出密钥正文。",
+            "runnable": True,
+            "aliases": ["hygiene", "sensitive-hygiene"],
+            "usage": "marvis workflow run --template 敏感文件卫生 --root samples/hygiene",
+            "steps": [
+                {"type": "hygiene", "name": "扫描并生成报告"},
+                {"type": "notify", "name": "完成", "message": "敏感文件卫生报告已生成（只读，未改动任何文件）"},
+            ],
+        },
         "项目初始化": {
             "description": "新项目初始化：创建目录结构、git仓库、README",
             "steps": [

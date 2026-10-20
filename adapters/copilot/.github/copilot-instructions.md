@@ -57,7 +57,7 @@ You have access to the Marvis MCP server with the following tools:
 **Automation**
 - `create_task` — Create scheduled task
 - `run_task` — Run task manually
-- `run_workflow` — Execute a workflow
+- `run_workflow` — Run a saved workflow, or pass `template` `敏感文件卫生` / `hygiene` with `root` for a read-only hygiene report
 - `list_workflows` — List available workflows
 
 Guidelines:

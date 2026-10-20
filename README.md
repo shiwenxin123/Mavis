@@ -41,13 +41,15 @@
 
 ## 📦 安装
 
-当前版本 **2.1.0**（[更新说明](CHANGELOG.md)）。本仓库尚未配置 PyPI 发布。
+当前版本 **2.1.1**（[更新说明](CHANGELOG.md)）。本仓库尚未配置 PyPI 发布。
 
-### 从 GitHub Release 标签安装
+### 从 GitHub 安装
 
 ```bash
-pip install "git+https://github.com/shiwenxin123/Mavis.git@v2.1.0"
+pip install "git+https://github.com/shiwenxin123/Mavis.git"
 ```
+
+已打标签的 2.1.0：`pip install "git+https://github.com/shiwenxin123/Mavis.git@v2.1.0"`。
 
 ### 方式一：pip 安装（本地开发）
 
@@ -133,8 +135,17 @@ marvis security ~/myproject --action full
 # 批量重命名（默认预览，确认后加 --execute）
 marvis batch rename ~/photos --pattern date-prefix --execute
 
-# 查看工作流模板
+# 查看工作流模板（敏感文件卫生标成可直接运行）
 marvis workflow templates
+
+# 只读扫描示例目录，打印卫生报告，不删除文件
+marvis workflow run --template 敏感文件卫生 --root samples/hygiene
+
+# 别名 hygiene。报告写到新文件；文件已存在则拒绝覆盖
+marvis workflow run --template hygiene --root samples/hygiene --output ./hygiene-report.txt
+
+# 机器可读结果
+marvis workflow run --template hygiene --root samples/hygiene --json
 
 # 本地模式：下面这条会拒绝访问网络
 marvis --local web search --query 关键词
@@ -171,7 +182,7 @@ from marvis.core.doc_analyzer import contract_review, generate_chart
 from marvis.core.system_manager import sys_info, system_clean, net_repair
 from marvis.core.security_audit import full_audit
 from marvis.core.project_scanner import scan_project
-from marvis.core.workflow import run_workflow, builtin_templates
+from marvis.core.workflow import run_workflow, builtin_templates, run_builtin_template
 ```
 
 ### Codex Skill

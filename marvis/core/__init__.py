@@ -47,5 +47,5 @@ from marvis.core.batch_processor import (
 )
 from marvis.core.workflow import (
     create_workflow, list_workflows, get_workflow, delete_workflow,
-    run_workflow, builtin_templates,
+    run_workflow, run_builtin_template, builtin_templates,
 )

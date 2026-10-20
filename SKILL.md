@@ -82,13 +82,13 @@ PDF/DOCX/XLSX/CSV/JSON/Markdown 互转。使用 `scripts/format_converter.py`。
 - 所有操作默认预览模式，加 `--execute` 实际执行
 
 ### 15. 快捷工作流 ★ 独有能力
-组合常用操作为可复用流程。使用 `scripts/workflow.py`。
-- 支持命令行/Python/PowerShell/条件判断/通知等步骤类型
-- 参数模板化：`{{param_name}}` 运行时替换
-- 内置模板：项目初始化、日报生成、安全检查、环境清理
-- `--action create` 创建自定义工作流
-- `--action run` 执行工作流
-- `--action templates` 查看内置模板
+组合常用操作为可复用流程。使用 `marvis workflow`。
+- `marvis workflow templates` 列出内置模板
+- 可直接运行的只读模板：`marvis workflow run --template 敏感文件卫生 --root samples/hygiene`
+- 别名 `hygiene`。`--output report.txt` 把报告写到新文件，文件已存在则不覆盖
+- 报告只含路径和类型，不打印密钥正文，不删除文件
+- 含删除或系统改动的模板不能用 `--template` 直接启动
+- 自定义流程仍可用 `workflow create` / `workflow run --name`
 
 ## ★ 独有能力总览
 

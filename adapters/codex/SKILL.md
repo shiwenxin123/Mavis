@@ -65,7 +65,7 @@ from marvis.core.system_manager import sys_info
 | 批量 | `batch_rename` | 批量重命名 |
 | 批量 | `compress_images` | 图片压缩 |
 | 批量 | `merge_pdfs` | PDF合并 |
-| 工作流 | `run_workflow` | 执行工作流 |
+| 工作流 | `run_workflow` | 执行已保存工作流，或 `template=敏感文件卫生` 加 `root` 做只读卫生扫描 |
 
 ## 安全准则
 

@@ -17,7 +17,9 @@ from marvis.core.web_monitor import search_web, read_page, monitor_page
 from marvis.core.project_scanner import scan_project, generate_readme
 from marvis.core.security_audit import full_audit, check_sensitive_files, check_open_ports
 from marvis.core.batch_processor import batch_rename, compress_images, merge_pdfs
-from marvis.core.workflow import create_workflow, list_workflows, run_workflow, builtin_templates
+from marvis.core.workflow import (
+    builtin_templates, create_workflow, list_workflows, run_builtin_template, run_workflow,
+)
 from marvis.core.doctor import doctor as run_doctor
 
 
@@ -309,7 +311,18 @@ def handle_list_workflows(args: dict) -> dict:
 
 
 def handle_run_workflow(args: dict) -> dict:
-    """执行工作流"""
+    """执行已保存的工作流，或直接运行内置只读模板。"""
+    if args.get("template") and args.get("name"):
+        return {"error": "请只指定 name 或 template 之一"}
+    if args.get("template"):
+        params = dict(args.get("params") or {})
+        if args.get("root"):
+            params["root"] = args["root"]
+        if args.get("output"):
+            params["output"] = args["output"]
+        return run_builtin_template(str(args["template"]), params)
+    if not args.get("name"):
+        return {"error": "需要 name 或 template"}
     return run_workflow(args["name"], args.get("params"))
 
 
@@ -785,14 +798,16 @@ ALL_TOOLS: list[dict] = [
     },
     {
         "name": "run_workflow",
-        "description": "执行工作流",
+        "description": "执行已保存的工作流，或直接运行内置模板。敏感文件卫生传 template 与 root，只读出报告，不删除文件。",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "name": {"type": "string"},
-                "params": {"type": "object"},
+                "name": {"type": "string", "description": "已保存的工作流名称"},
+                "template": {"type": "string", "description": "内置模板名，例如 敏感文件卫生 或 hygiene"},
+                "root": {"type": "string", "description": "要扫描的目录"},
+                "output": {"type": "string", "description": "把报告写到新文件，已存在则拒绝覆盖"},
+                "params": {"type": "object", "description": "模板参数。root / output 也可放在这里"},
             },
-            "required": ["name"],
         },
     },
     {

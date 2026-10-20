@@ -1,5 +1,10 @@
 # 更新日志
 
+## 2.1.1 — 2026-10-20
+
+- 新增可直接运行的工作流模板「敏感文件卫生」。`marvis workflow templates` 会列出它；`marvis workflow run --template 敏感文件卫生 --root samples/hygiene`（别名 `hygiene`）只读扫描并打印报告，不删除文件，也不输出密钥正文。`--output` 把报告写到新文件，已存在则拒绝覆盖。
+- MCP `run_workflow` 增加 `template`、`root`、`output`。原来的 `name` 调用不变。带删除或系统改动的内置模板不能用 `--template` 直接跑。
+
 ## 2.1.0 — 2026-10-19
 
 对应 [PR #1](https://github.com/shiwenxin123/Mavis/pull/1)。本仓库没有 PyPI 发布流程，这一版只从 GitHub Release / 标签安装。

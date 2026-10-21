@@ -9,6 +9,7 @@ Marvis 快捷工作流 — 组合操作为可复用流程。
 直接跑只读模板（不写入工作流存档）：
     from marvis.core.workflow import run_builtin_template
     run_builtin_template("敏感文件卫生", {"root": "samples/hygiene"})
+    run_builtin_template("磁盘与大文件巡检", {"root": "samples/disk"})
 """
 
 import json
@@ -94,9 +95,12 @@ def delete_workflow(name: str) -> bool:
 
 
 HYGIENE_TEMPLATE = "敏感文件卫生"
+DISK_TEMPLATE = "磁盘与大文件巡检"
 _TEMPLATE_ALIASES = {
     "hygiene": HYGIENE_TEMPLATE,
     "sensitive-hygiene": HYGIENE_TEMPLATE,
+    "disk": DISK_TEMPLATE,
+    "large-files": DISK_TEMPLATE,
 }
 _FAILED = {"failed", "error", "timeout"}
 
@@ -224,6 +228,33 @@ def _run_steps(name: str, steps: list[dict], params: Optional[dict] = None) -> d
                     f"扫描 {summary['files_scanned']} 个文件，发现 {summary['finding_count']} 项"
                 )
 
+            elif step_type == "disk":
+                from marvis.core.disk_inspect import format_disk_report, inspect_large_files
+
+                root = (params or {}).get("root")
+                if not isinstance(root, str) or not root.strip():
+                    raise ValueError("需要 --root 指向要巡检的目录，例如 samples/disk")
+                disk_params = params or {}
+                summary = inspect_large_files(
+                    root,
+                    top=disk_params.get("top"),
+                    older_than_days=disk_params.get("days"),
+                    min_old_bytes=disk_params.get("min_bytes"),
+                    max_depth=disk_params.get("max_depth"),
+                    max_entries=disk_params.get("max_entries"),
+                    timeout_seconds=disk_params.get("timeout_seconds"),
+                )
+                report = format_disk_report(summary)
+                output = disk_params.get("output")
+                if output:
+                    dest = os.path.abspath(os.path.expanduser(str(output)))
+                    report = f"{report}\n\n报告已写入: {dest}"
+                    context["report_path"] = _write_new_report(str(output), report)
+                context["disk_report"] = report
+                context["disk_summary"] = summary
+                result["status"] = "success"
+                result["output"] = f"已统计 {summary.get('files_seen', 0)} 个文件，未修改目录"
+
             elif step_type == "notify":
                 msg = step.get("message", "工作流通知")
                 result["status"] = "notified"
@@ -257,6 +288,36 @@ def _run_steps(name: str, steps: list[dict], params: Optional[dict] = None) -> d
             "by_severity": summary.get("by_severity") or {},
             "findings": summary.get("findings") or [],
             "report": context.get("hygiene_report") or "",
+        })
+        if context.get("report_path"):
+            payload["report_path"] = context["report_path"]
+    disk = context.get("disk_summary")
+    if isinstance(disk, dict):
+        payload.update({
+            "preview": True,
+            "deleted": False,
+            "modified": False,
+            "moved": False,
+            "root": disk.get("root"),
+            "filesystem": disk.get("filesystem") or {},
+            "top": disk.get("top"),
+            "older_than_days": disk.get("older_than_days"),
+            "min_old_bytes": disk.get("min_old_bytes"),
+            "files_seen": disk.get("files_seen", 0),
+            "dirs_seen": disk.get("dirs_seen", 0),
+            "scanned_bytes": disk.get("scanned_bytes", 0),
+            "symlink_count": disk.get("symlink_count", 0),
+            "outside_symlink_count": disk.get("outside_symlink_count", 0),
+            "error_count": disk.get("error_count", 0),
+            "skipped": disk.get("skipped") or [],
+            "partial": disk.get("partial", False),
+            "limit_hits": disk.get("limit_hits") or [],
+            "limits": disk.get("limits") or {},
+            "largest_files": disk.get("largest_files") or [],
+            "largest_dirs": disk.get("largest_dirs") or [],
+            "old_large_files": disk.get("old_large_files") or [],
+            "old_large_count": disk.get("old_large_count", 0),
+            "report": context.get("disk_report") or "",
         })
         if context.get("report_path"):
             payload["report_path"] = context["report_path"]
@@ -340,6 +401,16 @@ def builtin_templates() -> dict:
             "steps": [
                 {"type": "hygiene", "name": "扫描并生成报告"},
                 {"type": "notify", "name": "完成", "message": "敏感文件卫生报告已生成（只读，未改动任何文件）"},
+            ],
+        },
+        DISK_TEMPLATE: {
+            "description": "查看目录所在磁盘的用量，以及目录内最大的文件、子目录和久未修改的大文件。只读，不删除、不移动、不修改。",
+            "runnable": True,
+            "aliases": ["disk", "large-files"],
+            "usage": "marvis workflow run --template 磁盘与大文件巡检 --root samples/disk",
+            "steps": [
+                {"type": "disk", "name": "统计磁盘与大文件"},
+                {"type": "notify", "name": "完成", "message": "磁盘与大文件巡检报告已生成（只读，未改动任何文件）"},
             ],
         },
         "项目初始化": {

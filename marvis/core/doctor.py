@@ -51,6 +51,7 @@ def doctor() -> dict:
 def _hints(dependencies: dict, network_allowed_now: bool) -> list[str]:
     hints = [
         "试试: marvis workflow run --template 敏感文件卫生 --root samples/hygiene",
+        "试试: marvis workflow run --template 磁盘与大文件巡检 --root samples/disk",
         "试试: marvis search . --keyword README",
         "试试: marvis security . --action sensitive-files",
         "试试: marvis project . --action scan",

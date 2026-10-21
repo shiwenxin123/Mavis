@@ -45,7 +45,7 @@
 - `batch_rename` — 批量重命名
 - `compress_images` — 图片压缩
 - `merge_pdfs` — PDF 合并
-- `run_workflow` — 执行工作流；`template` 为「敏感文件卫生」或 `hygiene` 时加 `root`，只读出报告
+- `run_workflow` — 执行工作流；`template` 为「敏感文件卫生」/ `hygiene`，或「磁盘与大文件巡检」/ `disk` 时加 `root`，只读出报告
 - `web_search` — 网页搜索
 
 运行模式：默认效率模式，用户说"本地模式"时切为本地模式。

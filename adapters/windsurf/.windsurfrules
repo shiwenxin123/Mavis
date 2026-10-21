@@ -57,7 +57,7 @@ Marvis 智能助手提供以下 MCP tools，当用户需要时调用：
 **自动化**
 - `create_task(name, type, command, schedule)` — 创建定时任务
 - `run_task(name)` — 执行任务
-- `run_workflow(name, params)` — 执行工作流
+- `run_workflow(name, params)` — 执行工作流；只读模板可传 `template` 与 `root`
 - `list_workflows()` — 列出工作流
 
 注意：批量操作默认预览，删除需确认。

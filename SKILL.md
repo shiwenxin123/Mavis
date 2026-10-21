@@ -87,6 +87,8 @@ PDF/DOCX/XLSX/CSV/JSON/Markdown 互转。使用 `scripts/format_converter.py`。
 - 可直接运行的只读模板：`marvis workflow run --template 敏感文件卫生 --root samples/hygiene`
 - 别名 `hygiene`。`--output report.txt` 把报告写到新文件，文件已存在则不覆盖
 - 报告只含路径和类型，不打印密钥正文，不删除文件
+- 磁盘与大文件：`marvis workflow run --template 磁盘与大文件巡检 --root samples/disk`（别名 `disk`）
+- `--top`、`--days`、`--min-bytes` 可调。只统计大小和修改时间，不跟随符号链接，不改动文件
 - 含删除或系统改动的模板不能用 `--template` 直接启动
 - 自定义流程仍可用 `workflow create` / `workflow run --name`
 

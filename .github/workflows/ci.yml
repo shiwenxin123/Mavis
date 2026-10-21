@@ -23,12 +23,13 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Entry points
         run: |
-          python -c "import marvis; assert marvis.__version__ == '2.1.1', marvis.__version__"
+          python -c "import marvis; assert marvis.__version__ == '2.1.2', marvis.__version__"
           marvis --help
           marvis --version
           marvis doctor
           marvis workflow templates
           marvis workflow run --template hygiene --root samples/hygiene
+          marvis workflow run --template disk --root samples/disk
           marvis system repair
           marvis search . --mode name --keyword pyproject --limit 5
       - name: Pytest

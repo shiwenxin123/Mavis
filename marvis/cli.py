@@ -11,6 +11,7 @@ Marvis CLI — 命令行入口。
     marvis security <root> [--action full|sensitive-files|ports]
     marvis workflow templates
     marvis workflow run --template 敏感文件卫生 --root <dir> [--output report.txt]
+    marvis workflow run --template 磁盘与大文件巡检 --root <dir> [--top 10] [--days 90]
     marvis convert <input> [--format json|csv|markdown]
     marvis batch rename <root> [--pattern date-prefix|lowercase|clean]
     marvis ocr <root> [--keyword text]
@@ -92,9 +93,12 @@ def main(argv=None) -> int:
     p_wf = sub.add_parser("workflow", help="工作流")
     p_wf.add_argument("action", choices=["list", "run", "templates", "create", "delete"])
     p_wf.add_argument("--name", "-n", help="已保存的工作流名称")
-    p_wf.add_argument("--template", "-t", help="直接运行内置模板，例如 敏感文件卫生 或 hygiene")
-    p_wf.add_argument("--root", help="敏感文件卫生要扫描的目录，例如 samples/hygiene")
+    p_wf.add_argument("--template", "-t", help="直接运行内置模板，例如 敏感文件卫生、磁盘与大文件巡检，或别名 hygiene / disk")
+    p_wf.add_argument("--root", help="只读模板要扫描的目录，例如 samples/hygiene 或 samples/disk")
     p_wf.add_argument("--output", "-o", help="把可读报告写到新文件；文件已存在则拒绝覆盖")
+    p_wf.add_argument("--top", type=int, help="磁盘巡检列出的最大文件和目录数量，默认 10")
+    p_wf.add_argument("--days", type=int, help="久未修改的天数，默认 90")
+    p_wf.add_argument("--min-bytes", type=int, help="久未修改的大文件最小字节数，默认 1048576（1MB）")
     p_wf.add_argument("--params", help="JSON。create 需要 steps；run 可传参数对象")
     p_wf.add_argument("--json", action="store_true", help="输出 JSON。默认 templates 和卫生报告打印可读文本")
 
@@ -384,7 +388,8 @@ def _run_workflow_cli(args, run_workflow, run_builtin_template) -> dict:
     if args.template and args.name:
         return {"error": "请只指定 --name 或 --template 之一"}
     params = None
-    if args.params or args.root or args.output:
+    flagged = args.root or args.output or args.top is not None or args.days is not None or args.min_bytes is not None
+    if args.params or flagged:
         params = {}
         if args.params:
             payload, err = _load_json_arg(args.params)
@@ -397,6 +402,12 @@ def _run_workflow_cli(args, run_workflow, run_builtin_template) -> dict:
             params["root"] = args.root
         if args.output:
             params["output"] = args.output
+        if args.top is not None:
+            params["top"] = args.top
+        if args.days is not None:
+            params["days"] = args.days
+        if args.min_bytes is not None:
+            params["min_bytes"] = args.min_bytes
     if args.template:
         return run_builtin_template(args.template, params)
     if not args.name:

@@ -41,7 +41,7 @@
 
 ## 📦 安装
 
-当前版本 **2.1.1**（[更新说明](CHANGELOG.md)）。本仓库尚未配置 PyPI 发布。
+当前版本 **2.1.2**（[更新说明](CHANGELOG.md)）。本仓库尚未配置 PyPI 发布。
 
 ### 从 GitHub 安装
 
@@ -146,6 +146,12 @@ marvis workflow run --template hygiene --root samples/hygiene --output ./hygiene
 
 # 机器可读结果
 marvis workflow run --template hygiene --root samples/hygiene --json
+
+# 只读查看示例目录所在磁盘、最大的文件和子目录；不删除、不移动
+marvis workflow run --template 磁盘与大文件巡检 --root samples/disk
+
+# 别名 disk。前 5 项，超过 30 天且不小于 1MB 算久未修改
+marvis workflow run --template disk --root samples/disk --top 5 --days 30
 
 # 本地模式：下面这条会拒绝访问网络
 marvis --local web search --query 关键词
@@ -262,6 +268,7 @@ Marvis v2.1 支持多种 AI 编码工具：
 - 系统修改前说明具体变更和影响
 - 本地模式下不访问外部网络和 API（网页搜索、读取、监控、URL 探活都会拒绝）
 - 安全巡检仅做检测，不自动修复，也不把密钥正文写进结果
+- 工作流模板「敏感文件卫生」和「磁盘与大文件巡检」只读，不删除、不移动、不修改文件
 - 进程列表只显示程序名，命令行里的 token / 密钥样式文本会打码
 
 ## 🤝 致谢

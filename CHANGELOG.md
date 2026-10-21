@@ -1,5 +1,9 @@
 # 更新日志
 
+## 2.1.2 — 2026-10-21
+
+- 新增可直接运行的只读工作流模板「磁盘与大文件巡检」。`marvis workflow run --template 磁盘与大文件巡检 --root samples/disk`（别名 `disk`、`large-files`）报告 root 所在文件系统的用量、目录内最大的文件和子目录，以及超过指定天数的大文件。默认列出前 10 项、天数为 90、大文件阈值为 1MB，可用 `--top`、`--days`、`--min-bytes` 调整。不删除、不移动、不修改文件，不跟随符号链接；权限错误会跳过，并用深度、条目和时间上限避免扫过大目录。
+
 ## 2.1.1 — 2026-10-20
 
 - 新增可直接运行的工作流模板「敏感文件卫生」。`marvis workflow templates` 会列出它；`marvis workflow run --template 敏感文件卫生 --root samples/hygiene`（别名 `hygiene`）只读扫描并打印报告，不删除文件，也不输出密钥正文。`--output` 把报告写到新文件，已存在则拒绝覆盖。

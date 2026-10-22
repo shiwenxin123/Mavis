@@ -1,0 +1,1 @@
+NOTES_ONLY_MARKER 不是日志，不应被读取。

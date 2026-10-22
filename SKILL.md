@@ -89,6 +89,8 @@ PDF/DOCX/XLSX/CSV/JSON/Markdown 互转。使用 `scripts/format_converter.py`。
 - 报告只含路径和类型，不打印密钥正文，不删除文件
 - 磁盘与大文件：`marvis workflow run --template 磁盘与大文件巡检 --root samples/disk`（别名 `disk`）
 - `--top`、`--days`、`--min-bytes` 可调。只统计大小和修改时间，不跟随符号链接，不改动文件
+- 日志错误摘要：`marvis workflow run --template 日志错误摘要 --root samples/logs`（别名 `logs`、`log-errors`）
+- 只读日志末尾，合并重复的错误和警告，打码令牌和密码。`--days` 可限定最近几天。不执行、不修改日志
 - 含删除或系统改动的模板不能用 `--template` 直接启动
 - 自定义流程仍可用 `workflow create` / `workflow run --name`
 

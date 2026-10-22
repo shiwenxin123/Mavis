@@ -1,0 +1,8 @@
+2026-01-02 09:00:01 INFO worker started NOT_A_SECRET_MARKER_log_fixture
+2026-01-02 09:00:02 ERROR connection to 10.1.2.3:5432 refused
+2026-01-02 09:00:03 ERROR connection to 10.1.2.9:5432 refused
+2026-01-02 09:00:04 ERROR connection to 10.9.9.9:5432 refused
+2026-01-02 09:00:05 WARNING disk cache almost full
+2026-01-02 09:00:06 ERROR api_key=sk-FAKEKEY1234567890abcd request rejected
+2026-01-02 09:00:07 INFO healthy
+2026-01-02 09:00:08 WARNING session eyJhbGciOi.eyJzdWIiOi.SflKxwRJSMeK expired

@@ -41,7 +41,7 @@
 
 ## 📦 安装
 
-当前版本 **2.1.2**（[更新说明](CHANGELOG.md)）。本仓库尚未配置 PyPI 发布。
+当前版本 **2.1.3**（[更新说明](CHANGELOG.md)）。本仓库尚未配置 PyPI 发布。
 
 ### 从 GitHub 安装
 
@@ -152,6 +152,12 @@ marvis workflow run --template 磁盘与大文件巡检 --root samples/disk
 
 # 别名 disk。前 5 项，超过 30 天且不小于 1MB 算久未修改
 marvis workflow run --template disk --root samples/disk --top 5 --days 30
+
+# 只读摘要示例日志里的错误和警告；令牌和密码会打码，不修改文件
+marvis workflow run --template 日志错误摘要 --root samples/logs
+
+# 别名 logs。只看最近 7 天、每种级别最多 5 条
+marvis workflow run --template logs --root samples/logs --top 5 --days 7
 
 # 本地模式：下面这条会拒绝访问网络
 marvis --local web search --query 关键词
@@ -268,7 +274,8 @@ Marvis v2.1 支持多种 AI 编码工具：
 - 系统修改前说明具体变更和影响
 - 本地模式下不访问外部网络和 API（网页搜索、读取、监控、URL 探活都会拒绝）
 - 安全巡检仅做检测，不自动修复，也不把密钥正文写进结果
-- 工作流模板「敏感文件卫生」和「磁盘与大文件巡检」只读，不删除、不移动、不修改文件
+- 工作流模板「敏感文件卫生」「磁盘与大文件巡检」和「日志错误摘要」只读，不删除、不移动、不修改文件
+- 日志摘要只读文件末尾，不跟随符号链接，不解压，示例行里的令牌和密码会打码
 - 进程列表只显示程序名，命令行里的 token / 密钥样式文本会打码
 
 ## 🤝 致谢

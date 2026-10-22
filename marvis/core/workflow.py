@@ -10,6 +10,7 @@ Marvis 快捷工作流 — 组合操作为可复用流程。
     from marvis.core.workflow import run_builtin_template
     run_builtin_template("敏感文件卫生", {"root": "samples/hygiene"})
     run_builtin_template("磁盘与大文件巡检", {"root": "samples/disk"})
+    run_builtin_template("日志错误摘要", {"root": "samples/logs"})
 """
 
 import json
@@ -96,11 +97,14 @@ def delete_workflow(name: str) -> bool:
 
 HYGIENE_TEMPLATE = "敏感文件卫生"
 DISK_TEMPLATE = "磁盘与大文件巡检"
+LOG_TEMPLATE = "日志错误摘要"
 _TEMPLATE_ALIASES = {
     "hygiene": HYGIENE_TEMPLATE,
     "sensitive-hygiene": HYGIENE_TEMPLATE,
     "disk": DISK_TEMPLATE,
     "large-files": DISK_TEMPLATE,
+    "logs": LOG_TEMPLATE,
+    "log-errors": LOG_TEMPLATE,
 }
 _FAILED = {"failed", "error", "timeout"}
 
@@ -255,6 +259,40 @@ def _run_steps(name: str, steps: list[dict], params: Optional[dict] = None) -> d
                 result["status"] = "success"
                 result["output"] = f"已统计 {summary.get('files_seen', 0)} 个文件，未修改目录"
 
+            elif step_type == "logs":
+                from marvis.core.log_summary import format_log_report, summarize_logs
+
+                root = (params or {}).get("root")
+                if not isinstance(root, str) or not root.strip():
+                    raise ValueError("需要 --root 指向要摘要的日志目录，例如 samples/logs")
+                log_params = params or {}
+                summary = summarize_logs(
+                    root,
+                    top=log_params.get("top"),
+                    newer_than_days=log_params.get("days"),
+                    max_depth=log_params.get("max_depth"),
+                    max_files=log_params.get("max_files"),
+                    max_entries=log_params.get("max_entries"),
+                    max_lines=log_params.get("max_lines"),
+                    max_bytes_per_file=log_params.get("max_bytes_per_file"),
+                    max_total_bytes=log_params.get("max_total_bytes"),
+                    timeout_seconds=log_params.get("timeout_seconds"),
+                )
+                report = format_log_report(summary)
+                output = log_params.get("output")
+                if output:
+                    dest = os.path.abspath(os.path.expanduser(str(output)))
+                    report = f"{report}\n\n报告已写入: {dest}"
+                    context["report_path"] = _write_new_report(str(output), report)
+                context["logs_report"] = report
+                context["logs_summary"] = summary
+                result["status"] = "success"
+                result["output"] = (
+                    f"已读取 {summary.get('files_read', 0)} 个日志，"
+                    f"错误 {summary.get('error_events', 0)}，"
+                    f"警告 {summary.get('warning_events', 0)}，未修改文件"
+                )
+
             elif step_type == "notify":
                 msg = step.get("message", "工作流通知")
                 result["status"] = "notified"
@@ -318,6 +356,44 @@ def _run_steps(name: str, steps: list[dict], params: Optional[dict] = None) -> d
             "old_large_files": disk.get("old_large_files") or [],
             "old_large_count": disk.get("old_large_count", 0),
             "report": context.get("disk_report") or "",
+        })
+        if context.get("report_path"):
+            payload["report_path"] = context["report_path"]
+    logs = context.get("logs_summary")
+    if isinstance(logs, dict):
+        payload.update({
+            "preview": True,
+            "deleted": False,
+            "modified": False,
+            "moved": False,
+            "root": logs.get("root"),
+            "top": logs.get("top"),
+            "newer_than_days": logs.get("newer_than_days"),
+            "files_read": logs.get("files_read", 0),
+            "log_files_seen": logs.get("log_files_seen", 0),
+            "dirs_seen": logs.get("dirs_seen", 0),
+            "lines_read": logs.get("lines_read", 0),
+            "bytes_read": logs.get("bytes_read", 0),
+            "non_log_skipped": logs.get("non_log_skipped", 0),
+            "compressed_skipped": logs.get("compressed_skipped", 0),
+            "binary_skipped": logs.get("binary_skipped", 0),
+            "tailed_files": logs.get("tailed_files", 0),
+            "symlink_count": logs.get("symlink_count", 0),
+            "outside_symlink_count": logs.get("outside_symlink_count", 0),
+            "error_count": logs.get("error_count", 0),
+            "skipped": logs.get("skipped") or [],
+            "overflow": logs.get("overflow", 0),
+            "partial": logs.get("partial", False),
+            "limit_hits": logs.get("limit_hits") or [],
+            "limits": logs.get("limits") or {},
+            "levels": logs.get("levels") or {},
+            "fatal_count": logs.get("fatal_count", 0),
+            "error_events": logs.get("error_events", 0),
+            "warning_events": logs.get("warning_events", 0),
+            "errors": logs.get("errors") or [],
+            "warnings": logs.get("warnings") or [],
+            "busiest_files": logs.get("busiest_files") or [],
+            "report": context.get("logs_report") or "",
         })
         if context.get("report_path"):
             payload["report_path"] = context["report_path"]
@@ -411,6 +487,16 @@ def builtin_templates() -> dict:
             "steps": [
                 {"type": "disk", "name": "统计磁盘与大文件"},
                 {"type": "notify", "name": "完成", "message": "磁盘与大文件巡检报告已生成（只读，未改动任何文件）"},
+            ],
+        },
+        LOG_TEMPLATE: {
+            "description": "汇总目录里日志的致命、错误和警告，合并重复项，并打码令牌和密码。只读，不删除、不修改、不执行。",
+            "runnable": True,
+            "aliases": ["logs", "log-errors"],
+            "usage": "marvis workflow run --template 日志错误摘要 --root samples/logs",
+            "steps": [
+                {"type": "logs", "name": "摘要日志错误"},
+                {"type": "notify", "name": "完成", "message": "日志错误摘要已生成（只读，未改动任何文件）"},
             ],
         },
         "项目初始化": {

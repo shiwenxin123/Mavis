@@ -1,0 +1,4 @@
+这个目录是「日志错误摘要」的示例。
+日志是生成的占位内容，不含真实凭据或个人信息。
+摘要只读，不会删除、修改或执行这些文件。
+ABOUT_ONLY_SECRET_password=do-not-print-this

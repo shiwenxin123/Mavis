@@ -27,12 +27,12 @@ def _run(*args, env=None):
 def test_version_and_help():
     from importlib.metadata import version
 
-    assert version("marvis") == marvis.__version__ == "2.1.2"
+    assert version("marvis") == marvis.__version__ == "2.1.3"
     from marvis import search
     assert callable(search.search)
     version = _run("--version")
     assert version.returncode == 0
-    assert "marvis 2.1.2" in version.stdout
+    assert "marvis 2.1.3" in version.stdout
     help_proc = _run("--help")
     assert help_proc.returncode == 0
     assert "doctor" in help_proc.stdout
@@ -42,7 +42,7 @@ def test_version_and_help():
 def test_doctor_and_search_and_security(tmp_path):
     doctor = _run("doctor")
     assert doctor.returncode == 0
-    assert "Marvis 2.1.2" in doctor.stdout
+    assert "Marvis 2.1.3" in doctor.stdout
     assert "默认预览" in doctor.stdout
     assert "mcp" in doctor.stdout
 
@@ -203,7 +203,7 @@ def test_mcp_tools_return_real_payloads(tmp_path):
     assert repair["preview"] is True
 
     doctor = json.loads(execute_tool("doctor", {}))
-    assert doctor["version"] == "2.1.2"
+    assert doctor["version"] == "2.1.3"
     assert doctor["destructive_ops"] == "preview"
 
     note = tmp_path / "plain.txt"

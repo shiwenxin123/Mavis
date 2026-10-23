@@ -12,6 +12,7 @@ Marvis CLI — 命令行入口。
     marvis workflow templates
     marvis workflow run --template 敏感文件卫生 --root <dir> [--output report.txt]
     marvis workflow run --template 磁盘与大文件巡检 --root <dir> [--top 10] [--days 90]
+    marvis workflow run --template 日志错误摘要 --root <dir> [--top 10] [--days 7]
     marvis convert <input> [--format json|csv|markdown]
     marvis batch rename <root> [--pattern date-prefix|lowercase|clean]
     marvis ocr <root> [--keyword text]
@@ -93,11 +94,11 @@ def main(argv=None) -> int:
     p_wf = sub.add_parser("workflow", help="工作流")
     p_wf.add_argument("action", choices=["list", "run", "templates", "create", "delete"])
     p_wf.add_argument("--name", "-n", help="已保存的工作流名称")
-    p_wf.add_argument("--template", "-t", help="直接运行内置模板，例如 敏感文件卫生、磁盘与大文件巡检，或别名 hygiene / disk")
-    p_wf.add_argument("--root", help="只读模板要扫描的目录，例如 samples/hygiene 或 samples/disk")
+    p_wf.add_argument("--template", "-t", help="直接运行内置模板，例如 敏感文件卫生、磁盘与大文件巡检、日志错误摘要，或别名 hygiene / disk / logs")
+    p_wf.add_argument("--root", help="只读模板要扫描的目录，例如 samples/hygiene、samples/disk 或 samples/logs")
     p_wf.add_argument("--output", "-o", help="把可读报告写到新文件；文件已存在则拒绝覆盖")
-    p_wf.add_argument("--top", type=int, help="磁盘巡检列出的最大文件和目录数量，默认 10")
-    p_wf.add_argument("--days", type=int, help="久未修改的天数，默认 90")
+    p_wf.add_argument("--top", type=int, help="列出的条数。磁盘巡检默认 10 个最大文件；日志摘要默认 10 种消息")
+    p_wf.add_argument("--days", type=int, help="磁盘巡检：久未修改的天数，默认 90；日志摘要：只统计最近这么多天，默认不限")
     p_wf.add_argument("--min-bytes", type=int, help="久未修改的大文件最小字节数，默认 1048576（1MB）")
     p_wf.add_argument("--params", help="JSON。create 需要 steps；run 可传参数对象")
     p_wf.add_argument("--json", action="store_true", help="输出 JSON。默认 templates 和卫生报告打印可读文本")

@@ -1,0 +1,8 @@
+2026-01-02T09:01:00Z ERROR connection to 10.4.5.6:5432 refused
+{"level":"error","msg":"payment declined","token":"ghp_abcdefghijklmnopqrstuvwxyz0123456789"}
+2026-01-02 09:01:02 WARNING disk cache almost full
+2026-01-02 09:01:03 ERROR db postgres://appuser:db-secret-pass@db.internal:5432/app failed
+Traceback (most recent call last):
+  File "app.py", line 3, in handle
+    raise RuntimeError("boom FRAME_ONLY_SECRET")
+RuntimeError: boom password=super-secret-value

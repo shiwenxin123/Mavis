@@ -57,7 +57,7 @@ You have access to the Marvis MCP server with the following tools:
 **Automation**
 - `create_task` — Create scheduled task
 - `run_task` — Run task manually
-- `run_workflow` — Run a saved workflow, or pass `template` `敏感文件卫生` / `hygiene`, `磁盘与大文件巡检` / `disk`, or `日志错误摘要` / `logs` with `root` for a read-only report
+- `run_workflow` — Run a saved workflow, or pass `template` `敏感文件卫生` / `hygiene`, `磁盘与大文件巡检` / `disk`, `日志错误摘要` / `logs`, or `进程与监听端口巡检` / `procs` for a read-only report. Process inspection can omit `root` to inspect the local host, or pass `samples/procs`; it never kills processes.
 - `list_workflows` — List available workflows
 
 Guidelines:

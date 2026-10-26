@@ -91,6 +91,8 @@ PDF/DOCX/XLSX/CSV/JSON/Markdown 互转。使用 `scripts/format_converter.py`。
 - `--top`、`--days`、`--min-bytes` 可调。只统计大小和修改时间，不跟随符号链接，不改动文件
 - 日志错误摘要：`marvis workflow run --template 日志错误摘要 --root samples/logs`（别名 `logs`、`log-errors`）
 - 只读日志末尾，合并重复的错误和警告，打码令牌和密码。`--days` 可限定最近几天。不执行、不修改日志
+- 进程与监听端口：`marvis workflow run --template 进程与监听端口巡检`（别名 `procs`、`ports`、`listeners`）
+- 省略 `--root` 查看本机；`--root samples/procs` 只读静态样本。管理端口暴露只做提示，不结束进程，命令行令牌会打码
 - 含删除或系统改动的模板不能用 `--template` 直接启动
 - 自定义流程仍可用 `workflow create` / `workflow run --name`
 

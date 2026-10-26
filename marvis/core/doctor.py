@@ -53,6 +53,7 @@ def _hints(dependencies: dict, network_allowed_now: bool) -> list[str]:
         "试试: marvis workflow run --template 敏感文件卫生 --root samples/hygiene",
         "试试: marvis workflow run --template 磁盘与大文件巡检 --root samples/disk",
         "试试: marvis workflow run --template 日志错误摘要 --root samples/logs",
+        "试试: marvis workflow run --template 进程与监听端口巡检 --root samples/procs",
         "试试: marvis search . --keyword README",
         "试试: marvis security . --action sensitive-files",
         "试试: marvis project . --action scan",

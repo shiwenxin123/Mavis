@@ -41,7 +41,7 @@
 
 ## 📦 安装
 
-当前版本 **2.1.3**（[更新说明](CHANGELOG.md)）。本仓库尚未配置 PyPI 发布。
+当前版本 **2.1.4**（[更新说明](CHANGELOG.md)）。本仓库尚未配置 PyPI 发布。
 
 ### 从 GitHub 安装
 
@@ -159,6 +159,12 @@ marvis workflow run --template 日志错误摘要 --root samples/logs
 # 别名 logs。只看最近 7 天、每种级别最多 5 条
 marvis workflow run --template logs --root samples/logs --top 5 --days 7
 
+# 只读查看本机占用较高的进程和监听端口；不结束进程
+marvis workflow run --template 进程与监听端口巡检
+
+# 别名 procs。用静态样本，不探测本机；各列前 5 项
+marvis workflow run --template procs --root samples/procs --top 5
+
 # 本地模式：下面这条会拒绝访问网络
 marvis --local web search --query 关键词
 ```
@@ -274,9 +280,9 @@ Marvis v2.1 支持多种 AI 编码工具：
 - 系统修改前说明具体变更和影响
 - 本地模式下不访问外部网络和 API（网页搜索、读取、监控、URL 探活都会拒绝）
 - 安全巡检仅做检测，不自动修复，也不把密钥正文写进结果
-- 工作流模板「敏感文件卫生」「磁盘与大文件巡检」和「日志错误摘要」只读，不删除、不移动、不修改文件
+- 工作流模板「敏感文件卫生」「磁盘与大文件巡检」「日志错误摘要」和「进程与监听端口巡检」只读，不删除、不移动、不修改文件，也不结束进程
 - 日志摘要只读文件末尾，不跟随符号链接，不解压，示例行里的令牌和密码会打码
-- 进程列表只显示程序名，命令行里的 token / 密钥样式文本会打码
+- 进程列表和进程巡检会打码命令行里的 token / 密钥样式文本。巡检不读其它用户的命令行，也不结束进程
 
 ## 🤝 致谢
 

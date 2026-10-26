@@ -65,7 +65,7 @@ from marvis.core.system_manager import sys_info
 | 批量 | `batch_rename` | 批量重命名 |
 | 批量 | `compress_images` | 图片压缩 |
 | 批量 | `merge_pdfs` | PDF合并 |
-| 工作流 | `run_workflow` | 执行已保存工作流，或 `template=敏感文件卫生` / `磁盘与大文件巡检` / `日志错误摘要` 加 `root` 做只读扫描 |
+| 工作流 | `run_workflow` | 执行已保存工作流，或 `template=敏感文件卫生` / `磁盘与大文件巡检` / `日志错误摘要` / `进程与监听端口巡检` 做只读扫描。进程巡检可省略 root |
 
 ## 安全准则
 

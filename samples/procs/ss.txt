@@ -1,0 +1,5 @@
+tcp LISTEN 0 128 0.0.0.0:22 0.0.0.0:* users:(("sshd",pid=900,fd=3))
+tcp LISTEN 0 128 127.0.0.1:5432 0.0.0.0:* users:(("postgres",pid=7,fd=5))
+udp UNCONN 0 0 0.0.0.0:69 0.0.0.0:* users:(("in.tftpd",pid=50,fd=0))
+tcp LISTEN 0 128 127.0.0.1:8080 0.0.0.0:* users:(("python",pid=42,fd=6))
+tcp LISTEN 0 128 [::]:22 [::]:* users:(("sshd",pid=900,fd=4))

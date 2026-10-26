@@ -6,7 +6,7 @@ Marvis — 通用 AI 智能助手核心库。
 或通过 MCP Server 向任何 AI 平台暴露。
 """
 
-__version__ = "2.1.3"
+__version__ = "2.1.4"
 
 _LAZY_MODULES = {
     "search": "marvis.core.search",

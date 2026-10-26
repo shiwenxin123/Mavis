@@ -1,0 +1,6 @@
+USER PID %CPU RSS COMMAND
+root 1 0.1 4096 /sbin/init
+app 42 25.0 81920 python worker --token=super-secret-value
+app 7 1.5 10240 postgres: writer
+low 3 0.0 2048 nc -l -p 4444
+app 99 0.2 3072 python -m app --api-key sk-FAKEKEY1234567890abcd --password hunter2-fixture

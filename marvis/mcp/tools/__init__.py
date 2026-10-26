@@ -797,15 +797,15 @@ ALL_TOOLS: list[dict] = [
     },
     {
         "name": "run_workflow",
-        "description": "执行已保存的工作流，或直接运行内置只读模板。敏感文件卫生、磁盘与大文件巡检、日志错误摘要传 template 和 root，只出报告，不删除、不修改文件。",
+        "description": "执行已保存的工作流，或直接运行内置只读模板。敏感文件卫生、磁盘与大文件巡检、日志错误摘要传 template 和 root；进程与监听端口巡检可省略 root 查看本机，或传 samples/procs。只出报告，不删除、不修改文件，不结束进程。",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "name": {"type": "string", "description": "已保存的工作流名称"},
-                "template": {"type": "string", "description": "内置模板名，例如 敏感文件卫生、磁盘与大文件巡检、日志错误摘要，或别名 hygiene / disk / logs"},
-                "root": {"type": "string", "description": "要扫描的目录"},
+                "template": {"type": "string", "description": "内置模板名，例如 敏感文件卫生、磁盘与大文件巡检、日志错误摘要、进程与监听端口巡检，或别名 hygiene / disk / logs / procs / ports / listeners"},
+                "root": {"type": "string", "description": "要扫描的目录。进程巡检可省略，改为查看本机"},
                 "output": {"type": "string", "description": "把报告写到新文件，已存在则拒绝覆盖"},
-                "top": {"type": "integer", "description": "列出的条数。磁盘巡检默认 10；日志摘要默认 10 种消息"},
+                "top": {"type": "integer", "description": "列出的条数。磁盘巡检默认 10；日志摘要默认 10 种消息；进程巡检默认各 10 个进程和监听"},
                 "days": {"type": "integer", "description": "磁盘巡检：久未修改的天数，默认 90；日志摘要：只统计最近这么多天，默认不限"},
                 "min_bytes": {"type": "integer", "description": "久未修改的大文件最小字节数，默认 1048576"},
                 "params": {"type": "object", "description": "模板参数。root / output / top / days 也可放在这里"},

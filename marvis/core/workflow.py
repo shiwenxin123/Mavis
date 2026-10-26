@@ -11,6 +11,7 @@ Marvis 快捷工作流 — 组合操作为可复用流程。
     run_builtin_template("敏感文件卫生", {"root": "samples/hygiene"})
     run_builtin_template("磁盘与大文件巡检", {"root": "samples/disk"})
     run_builtin_template("日志错误摘要", {"root": "samples/logs"})
+    run_builtin_template("进程与监听端口巡检", {"root": "samples/procs"})
 """
 
 import json
@@ -98,6 +99,7 @@ def delete_workflow(name: str) -> bool:
 HYGIENE_TEMPLATE = "敏感文件卫生"
 DISK_TEMPLATE = "磁盘与大文件巡检"
 LOG_TEMPLATE = "日志错误摘要"
+PROC_TEMPLATE = "进程与监听端口巡检"
 _TEMPLATE_ALIASES = {
     "hygiene": HYGIENE_TEMPLATE,
     "sensitive-hygiene": HYGIENE_TEMPLATE,
@@ -105,6 +107,9 @@ _TEMPLATE_ALIASES = {
     "large-files": DISK_TEMPLATE,
     "logs": LOG_TEMPLATE,
     "log-errors": LOG_TEMPLATE,
+    "procs": PROC_TEMPLATE,
+    "ports": PROC_TEMPLATE,
+    "listeners": PROC_TEMPLATE,
 }
 _FAILED = {"failed", "error", "timeout"}
 
@@ -293,6 +298,35 @@ def _run_steps(name: str, steps: list[dict], params: Optional[dict] = None) -> d
                     f"警告 {summary.get('warning_events', 0)}，未修改文件"
                 )
 
+            elif step_type == "procs":
+                from marvis.core.proc_inspect import format_proc_report, inspect_processes_and_ports
+
+                proc_params = params or {}
+                root = proc_params.get("root")
+                if root is not None and not isinstance(root, str):
+                    raise ValueError("root 必须是目录路径")
+                summary = inspect_processes_and_ports(
+                    root.strip() if isinstance(root, str) and root.strip() else None,
+                    top=proc_params.get("top"),
+                    max_entries=proc_params.get("max_entries"),
+                    max_bytes=proc_params.get("max_bytes"),
+                    timeout_seconds=proc_params.get("timeout_seconds"),
+                )
+                report = format_proc_report(summary)
+                output = proc_params.get("output")
+                if output:
+                    dest = os.path.abspath(os.path.expanduser(str(output)))
+                    report = f"{report}\n\n报告已写入: {dest}"
+                    context["report_path"] = _write_new_report(str(output), report)
+                context["procs_report"] = report
+                context["procs_summary"] = summary
+                result["status"] = "success"
+                result["output"] = (
+                    f"看到 {summary.get('process_count', 0)} 个进程，"
+                    f"{summary.get('listener_count', 0)} 个监听，"
+                    f"提示 {len(summary.get('notes') or [])} 条，未结束进程"
+                )
+
             elif step_type == "notify":
                 msg = step.get("message", "工作流通知")
                 result["status"] = "notified"
@@ -397,6 +431,38 @@ def _run_steps(name: str, steps: list[dict], params: Optional[dict] = None) -> d
         })
         if context.get("report_path"):
             payload["report_path"] = context["report_path"]
+    procs = context.get("procs_summary")
+    if isinstance(procs, dict):
+        payload.update({
+            "preview": True,
+            "deleted": False,
+            "modified": False,
+            "moved": False,
+            "killed": False,
+            "source": procs.get("source"),
+            "root": procs.get("root"),
+            "requested_root": procs.get("requested_root"),
+            "hostname": procs.get("hostname") or "",
+            "top": procs.get("top"),
+            "process_count": procs.get("process_count", 0),
+            "listener_count": procs.get("listener_count", 0),
+            "listeners_omitted": procs.get("listeners_omitted", 0),
+            "processes_by_rss": procs.get("processes_by_rss") or [],
+            "processes_by_cpu": procs.get("processes_by_cpu") or [],
+            "listeners": procs.get("listeners") or [],
+            "notes": procs.get("notes") or [],
+            "note_overflow": procs.get("note_overflow", 0),
+            "cmdline_denied": procs.get("cmdline_denied", 0),
+            "error_count": procs.get("error_count", 0),
+            "skipped": procs.get("skipped") or [],
+            "partial": procs.get("partial", False),
+            "limit_hits": procs.get("limit_hits") or [],
+            "limits": procs.get("limits") or {},
+            "backends": procs.get("backends") or [],
+            "report": context.get("procs_report") or "",
+        })
+        if context.get("report_path"):
+            payload["report_path"] = context["report_path"]
     return payload
 
 
@@ -462,7 +528,7 @@ def format_templates(templates: Optional[dict] = None) -> str:
             lines.append(f"  别名: {', '.join(aliases)}")
         lines.append(f"  步骤: {len(tpl.get('steps') or [])}")
         lines.append("")
-    lines.append("直接运行只读模板不会改动文件。含删除或系统改动的模板不能用 --template 启动。")
+    lines.append("直接运行只读模板不会改动文件，也不会结束进程。含删除或系统改动的模板不能用 --template 启动。")
     return "\n".join(lines)
 
 
@@ -497,6 +563,16 @@ def builtin_templates() -> dict:
             "steps": [
                 {"type": "logs", "name": "摘要日志错误"},
                 {"type": "notify", "name": "完成", "message": "日志错误摘要已生成（只读，未改动任何文件）"},
+            ],
+        },
+        PROC_TEMPLATE: {
+            "description": "查看本机或样本里占用内存和 CPU 较高的进程，以及 TCP/UDP 监听端口。管理端口暴露只做提示，不结束进程。只读。",
+            "runnable": True,
+            "aliases": ["procs", "ports", "listeners"],
+            "usage": "marvis workflow run --template 进程与监听端口巡检 [--root samples/procs] [--top 10]",
+            "steps": [
+                {"type": "procs", "name": "巡检进程与监听端口"},
+                {"type": "notify", "name": "完成", "message": "进程与监听端口巡检报告已生成（只读，未结束进程，未改动文件）"},
             ],
         },
         "项目初始化": {
